@@ -292,6 +292,67 @@ pip install PyYAML         # For YAML file services only
 pip install boto3          # For S3 services only
 ```
 
+## Testing
+
+This package includes comprehensive tests to ensure all services work correctly.
+
+### Test Structure
+
+The tests are organized into three categories:
+
+1. **Unit Tests** (`tests/unit/`) - Test individual components in isolation
+2. **Integration Tests** (`tests/integration/`) - Test services working together
+3. **End-to-End Tests** (`tests/e2e/`) - Test complete workflows simulating real usage
+
+### Running Tests
+
+To run all tests:
+
+```bash
+# Run all tests with pytest
+uv run pytest tests/unit/ tests/integration/ tests/e2e/ -v
+
+# Run specific test categories
+uv run pytest tests/unit/ -v           # Unit tests only
+uv run pytest tests/integration/ -v    # Integration tests only
+uv run pytest tests/e2e/ -v            # End-to-end tests only
+
+# Run specific test files
+uv run pytest tests/unit/test_session_services.py -v
+uv run pytest tests/unit/test_artifact_services.py -v
+
+# Run tests with coverage (if coverage is installed)
+uv run pytest tests/ --cov=src/custom_adk_services --cov-report=html
+```
+
+### Test Coverage
+
+The test suite includes:
+
+- **Unit Tests**: 22 tests covering all service implementations
+- **Integration Tests**: 3 tests verifying services work together
+- **End-to-End Tests**: 3 tests simulating real-world usage scenarios
+- **Legacy Tests**: Compatibility tests for older test scripts
+
+All tests verify:
+- Service initialization and cleanup
+- Core functionality (create, get, list, delete, update)
+- Versioning support (for artifact services)
+- Error handling and edge cases
+- Data integrity and consistency
+
+### Legacy Test Scripts
+
+The package also includes legacy test scripts that can be run directly:
+
+```bash
+# Run legacy session service tests
+uv run python tests/test_session_services.py
+
+# Run legacy artifact service tests
+uv run python tests/test_artifact_services.py
+```
+
 ## Usage Examples
 
 ### Session Services Example
@@ -408,18 +469,26 @@ uv run python examples/artifact_service_example.py
 uv run python examples/google_adk_integration.py
 ```
 
-### Testing
+### Adding New Services
 
-To run tests, you'll need to install the test dependencies:
+To add a new service:
+
+1. Create a new service class that extends the appropriate base class
+2. Implement all required abstract methods
+3. Add proper initialization and cleanup methods
+4. Write comprehensive unit tests
+5. Update documentation and examples
+
+### Dependencies
+
+To add new dependencies:
 
 ```bash
-uv add pytest pytest-asyncio
-```
+# Add a new dependency
+uv add package_name
 
-Then run:
-
-```bash
-uv run pytest tests/
+# Add a development dependency
+uv add --dev package_name
 ```
 
 ## License
