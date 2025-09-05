@@ -1,7 +1,7 @@
 [project]
 name = "google-adk-extras"
 version = "0.1.0"
-description = "Custom implementations of Google ADK services with support for SQL, MongoDB, Redis, and YAML file storage"
+description = "Custom implementations of Google ADK services with support for SQL, MongoDB, Redis, YAML file storage, and S3-compatible storage"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,5 +9,6 @@ dependencies = [
     "pymongo>=4.0.0",
     "redis>=4.0.0",
     "pyyaml>=6.0.0",
+    "boto3>=1.34.0",
     "google-adk>=1.13.0",
 ]

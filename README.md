@@ -1,10 +1,12 @@
-# Custom ADK Session Services
+# Custom ADK Services
 
-This package provides custom implementations of Google ADK's `BaseSessionService` for various storage backends.
+This package provides custom implementations of Google ADK services for various storage backends.
 
-## Available Session Services
+## Available Services
 
-### 1. SQLSessionService
+### Session Services
+
+#### 1. SQLSessionService
 A session service that stores session data in SQL databases using SQLAlchemy.
 
 **Features:**
@@ -34,7 +36,7 @@ session = await service.create_session(
 )
 ```
 
-### 2. MongoSessionService
+#### 2. MongoSessionService
 A session service that stores session data in MongoDB.
 
 **Features:**
@@ -62,7 +64,7 @@ session = await service.create_session(
 )
 ```
 
-### 3. RedisSessionService
+#### 3. RedisSessionService
 A session service that stores session data in Redis.
 
 **Features:**
@@ -90,7 +92,7 @@ session = await service.create_session(
 )
 ```
 
-### 4. YamlFileSessionService
+#### 4. YamlFileSessionService
 A session service that stores session data in YAML files.
 
 **Features:**
@@ -118,6 +120,161 @@ session = await service.create_session(
 )
 ```
 
+### Artifact Services
+
+#### 1. SQLArtifactService
+An artifact service that stores artifacts in SQL databases using SQLAlchemy.
+
+**Features:**
+- Supports all major SQL databases (SQLite, PostgreSQL, MySQL, etc.)
+- Automatic table creation
+- Full artifact management with versioning
+- Binary data storage in BLOB columns
+
+**Dependencies:**
+```bash
+pip install sqlalchemy
+```
+
+**Usage:**
+```python
+from custom_adk_services.artifacts import SQLArtifactService
+from google.genai.types import Part, Blob
+
+# Initialize with database URL
+service = SQLArtifactService("sqlite:///./artifacts.db")
+
+# Create an artifact
+data = b"Hello, World!"
+blob = Blob(data=data, mime_type="text/plain")
+artifact = Part(inline_data=blob)
+
+# Save the artifact
+version = await service.save_artifact(
+    app_name="my_app",
+    user_id="user123",
+    session_id="session456",
+    filename="hello.txt",
+    artifact=artifact
+)
+```
+
+#### 2. MongoArtifactService
+An artifact service that stores artifacts in MongoDB.
+
+**Features:**
+- High-performance document storage
+- Automatic index creation
+- Full artifact management with versioning
+- Binary data storage in GridFS or as binary fields
+
+**Dependencies:**
+```bash
+pip install pymongo
+```
+
+**Usage:**
+```python
+from custom_adk_services.artifacts import MongoArtifactService
+from google.genai.types import Part, Blob
+
+# Initialize with connection string
+service = MongoArtifactService("mongodb://localhost:27017/")
+
+# Create an artifact
+data = b"Hello, World!"
+blob = Blob(data=data, mime_type="text/plain")
+artifact = Part(inline_data=blob)
+
+# Save the artifact
+version = await service.save_artifact(
+    app_name="my_app",
+    user_id="user123",
+    session_id="session456",
+    filename="hello.txt",
+    artifact=artifact
+)
+```
+
+#### 3. LocalFolderArtifactService
+An artifact service that stores artifacts as files in a local directory.
+
+**Features:**
+- File-based storage with hierarchical organization
+- Full artifact management with versioning
+- Human-readable metadata in JSON files
+- Easy backup and inspection
+
+**Dependencies:**
+None (uses standard Python libraries)
+
+**Usage:**
+```python
+from custom_adk_services.artifacts import LocalFolderArtifactService
+from google.genai.types import Part, Blob
+
+# Initialize with base directory
+service = LocalFolderArtifactService("./artifacts")
+
+# Create an artifact
+data = b"Hello, World!"
+blob = Blob(data=data, mime_type="text/plain")
+artifact = Part(inline_data=blob)
+
+# Save the artifact
+version = await service.save_artifact(
+    app_name="my_app",
+    user_id="user123",
+    session_id="session456",
+    filename="hello.txt",
+    artifact=artifact
+)
+```
+
+#### 4. S3ArtifactService
+An artifact service that stores artifacts in S3-compatible storage.
+
+**Features:**
+- Cloud storage with S3-compatible APIs
+- Full artifact management with versioning
+- Support for AWS S3 and other S3-compatible services (MinIO, etc.)
+- Secure access with credentials
+
+**Dependencies:**
+```bash
+pip install boto3
+```
+
+**Usage:**
+```python
+from custom_adk_services.artifacts import S3ArtifactService
+from google.genai.types import Part, Blob
+
+# Initialize with S3 configuration
+service = S3ArtifactService(
+    bucket_name="my-artifacts-bucket",
+    endpoint_url="https://s3.amazonaws.com",  # For AWS
+    # endpoint_url="http://localhost:9000",  # For MinIO
+    region_name="us-east-1",
+    aws_access_key_id="YOUR_ACCESS_KEY",
+    aws_secret_access_key="YOUR_SECRET_KEY"
+)
+
+# Create an artifact
+data = b"Hello, World!"
+blob = Blob(data=data, mime_type="text/plain")
+artifact = Part(inline_data=blob)
+
+# Save the artifact
+version = await service.save_artifact(
+    app_name="my_app",
+    user_id="user123",
+    session_id="session456",
+    filename="hello.txt",
+    artifact=artifact
+)
+```
+
 ## Installation
 
 ```bash
@@ -125,17 +282,19 @@ session = await service.create_session(
 pip install google-adk
 
 # For all services
-pip install sqlalchemy pymongo redis PyYAML
+pip install sqlalchemy pymongo redis PyYAML boto3
 
 # For specific services only
-pip install sqlalchemy  # For SQLSessionService only
-pip install pymongo     # For MongoSessionService only
-pip install redis       # For RedisSessionService only
-pip install PyYAML      # For YamlFileSessionService only
+pip install sqlalchemy     # For SQL services only
+pip install pymongo        # For MongoDB services only
+pip install redis          # For Redis services only
+pip install PyYAML         # For YAML file services only
+pip install boto3          # For S3 services only
 ```
 
-## Usage Example
+## Usage Examples
 
+### Session Services Example
 ```python
 import asyncio
 from custom_adk_services.sessions import SQLSessionService
@@ -169,21 +328,68 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+### Artifact Services Example
+```python
+import asyncio
+from custom_adk_services.artifacts import LocalFolderArtifactService
+from google.genai.types import Part, Blob
+
+async def main():
+    # Initialize service
+    service = LocalFolderArtifactService("./artifacts")
+    
+    try:
+        # Create an artifact
+        data = b"Hello, World!"
+        blob = Blob(data=data, mime_type="text/plain")
+        artifact = Part(inline_data=blob)
+        
+        # Save the artifact
+        version = await service.save_artifact(
+            app_name="my_app",
+            user_id="user123",
+            session_id="session456",
+            filename="hello.txt",
+            artifact=artifact
+        )
+        
+        # Load the artifact
+        loaded_artifact = await service.load_artifact(
+            app_name="my_app",
+            user_id="user123",
+            session_id="session456",
+            filename="hello.txt"
+        )
+        
+        if loaded_artifact and loaded_artifact.inline_data:
+            print(f"Artifact content: {loaded_artifact.inline_data.data.decode('utf-8')}")
+        
+    finally:
+        # Clean up
+        await service.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ## Integration with Google ADK
 
-The custom session services can be used directly with Google ADK runners:
+The custom services can be used directly with Google ADK runners:
 
 ```python
 from google.adk.runners import InMemoryRunner
 from custom_adk_services.sessions import YamlFileSessionService
+from custom_adk_services.artifacts import LocalFolderArtifactService
 
-# Create a custom session service
+# Create custom services
 session_service = YamlFileSessionService("./sessions")
+artifact_service = LocalFolderArtifactService("./artifacts")
 
-# Create a runner with our custom session service
+# Create a runner with our custom services
 runner = InMemoryRunner(
     agent=your_agent,
-    session_service=session_service
+    session_service=session_service,
+    artifact_service=artifact_service
 )
 ```
 
@@ -192,11 +398,11 @@ runner = InMemoryRunner(
 ### Running Examples
 
 ```bash
-# Run the simple test
-uv run python examples/test_session_service.py
+# Run session service examples
+uv run python examples/session_service_example.py
 
-# Run the comprehensive test
-uv run python tests/test_session_services.py
+# Run artifact service examples
+uv run python examples/artifact_service_example.py
 
 # Run the Google ADK integration example
 uv run python examples/google_adk_integration.py
