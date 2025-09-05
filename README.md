@@ -110,6 +110,7 @@ See the [examples](examples/) directory for complete working examples of each se
   - PyMongo for MongoDB services
   - redis-py for Redis services
   - PyYAML for YAML file services
+  - boto3 for S3 services
 
 ## Development
 
