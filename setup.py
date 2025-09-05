@@ -11,7 +11,7 @@ with open(os.path.join(this_directory, 'pyproject.toml'), encoding='utf-8') as f
     import re
     content = f.read()
     version_match = re.search(r'version = "([^"]+)"', content)
-    version = version_match.group(1) if version_match else '0.1.0'
+    version = version_match.group(1) if version_match else '0.1.1'
     
     description_match = re.search(r'description = "([^"]+)"', content)
     description = description_match.group(1) if description_match else 'Custom implementations of Google ADK services'
