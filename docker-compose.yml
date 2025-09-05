@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Main application service
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - uv-cache:/root/.cache/uv
+    environment:
+      - UV_PROJECT_ENVIRONMENT=/app/.venv
+    depends_on:
+      - redis
+      - mongodb
+    develop:
+      watch:
+        - path: ./src
+          target: /app/src
+          action: sync
+        - path: ./pyproject.toml
+          target: /app/pyproject.toml
+          action: rebuild
+
+  # Redis service for RedisSessionService and RedisMemoryService
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  # MongoDB service for MongoSessionService and MongoMemoryService
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+
+  # PostgreSQL service for SQL services (alternative to SQLite)
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: adk_services
+      POSTGRES_USER: adk_user
+      POSTGRES_PASSWORD: adk_password
+
+volumes:
+  uv-cache:
+  redis-data:
+  mongodb-data:
+  postgres-data:
