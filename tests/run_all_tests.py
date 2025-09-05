@@ -62,7 +62,7 @@ def run_legacy_tests():
     
     print("Running legacy session service tests...")
     result = subprocess.run([
-        sys.executable, "tests/test_session_services_integration.py"
+        sys.executable, "tests/session_services_integration_test.py"
     ], cwd=os.path.join(os.path.dirname(__file__), ".."))
     
     if result.returncode != 0:
@@ -71,7 +71,7 @@ def run_legacy_tests():
     
     print("Running legacy artifact service tests...")
     result = subprocess.run([
-        sys.executable, "tests/test_artifact_services_integration.py"
+        sys.executable, "tests/artifact_services_integration_test.py"
     ], cwd=os.path.join(os.path.dirname(__file__), ".."))
     
     if result.returncode != 0:
