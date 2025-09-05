@@ -1,16 +1,14 @@
 [project]
-name = "google-adk-extras"
+name = "custom-adk-services"
 version = "0.1.0"
-description = "Custom implementations of Google ADK services with support for SQL, MongoDB, Redis, YAML file storage, and S3-compatible storage"
+description = "Custom implementations of Google ADK services (Session, Artifact, Memory) with multiple storage backends"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
+    "google-genai>=1.0.0",
     "sqlalchemy>=2.0.0",
     "pymongo>=4.0.0",
     "redis>=4.0.0",
     "pyyaml>=6.0.0",
-    "boto3>=1.34.0",
-    "google-adk>=1.13.0",
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.1.0",
+    "typing-extensions>=4.0.0",
 ]
