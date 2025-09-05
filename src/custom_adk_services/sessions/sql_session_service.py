@@ -1,14 +1,13 @@
 """SQL-based session service implementation using SQLAlchemy."""
 
 import json
-import time
-import uuid
+import logging
 from typing import Any, Optional
+from datetime import datetime, timezone
 
 try:
-    from sqlalchemy import create_engine, Column, String, Text, Float, text
-    from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import create_engine, Column, String, Text, DateTime
+    from sqlalchemy.orm import declarative_base, sessionmaker
     from sqlalchemy.exc import SQLAlchemyError
 except ImportError:
     raise ImportError(
@@ -16,13 +15,13 @@ except ImportError:
         "Install it with: pip install sqlalchemy"
     )
 
-from google.adk.sessions.session import Session
 from google.adk.events.event import Event
-from google.adk.sessions.base_session_service import GetSessionConfig, ListSessionsResponse
-
 from .base_custom_session_service import BaseCustomSessionService
 
 
+logger = logging.getLogger('custom_adk_services.' + __name__)
+
+# Use the modern declarative_base import
 Base = declarative_base()
 
 
@@ -40,7 +39,7 @@ class SQLSessionModel(Base):
     # Session data
     state = Column(Text, nullable=False)  # JSON string
     events = Column(Text, nullable=False)  # JSON string
-    last_update_time = Column(Float, nullable=False, default=0.0)
+    last_update_time = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class SQLSessionService(BaseCustomSessionService):
@@ -121,43 +120,47 @@ class SQLSessionService(BaseCustomSessionService):
         user_id: str,
         state: Optional[dict[str, Any]] = None,
         session_id: Optional[str] = None,
-    ) -> Session:
+    ) -> "Session":
         """Implementation of session creation."""
+        # Import Session inside the function to avoid circular import
+        from google.adk.sessions.session import Session
+        import time
+        import uuid
+        
+        # Generate session ID if not provided
+        session_id = session_id or str(uuid.uuid4())
+        
+        # Create session object
+        session = Session(
+            id=session_id,
+            app_name=app_name,
+            user_id=user_id,
+            state=state or {},
+            events=[],
+            last_update_time=time.time()
+        )
+        
+        # Save to database
         db_session = self._get_db_session()
         try:
-            # Generate session ID if not provided
-            session_id = session_id or str(uuid.uuid4())
-            
-            # Create session object
-            session = Session(
-                id=session_id,
-                app_name=app_name,
-                user_id=user_id,
-                state=state or {},
-                events=[],
-                last_update_time=time.time()
-            )
-            
-            # Create database model
             db_session_model = SQLSessionModel(
                 id=session_id,
                 app_name=app_name,
                 user_id=user_id,
                 state=self._serialize_state(session.state),
                 events=self._serialize_events(session.events),
-                last_update_time=session.last_update_time
+                last_update_time=datetime.fromtimestamp(session.last_update_time, tz=timezone.utc)
             )
             
-            # Save to database
             db_session.add(db_session_model)
             db_session.commit()
-            
-            return session
         except SQLAlchemyError as e:
             db_session.rollback()
             raise RuntimeError(f"Failed to create session: {e}")
         finally:
             db_session.close()
+        
+        return session
 
     async def _get_session_impl(
         self,
@@ -165,12 +168,13 @@ class SQLSessionService(BaseCustomSessionService):
         app_name: str,
         user_id: str,
         session_id: str,
-        config: Optional[GetSessionConfig] = None,
-    ) -> Optional[Session]:
+        config: Optional["GetSessionConfig"] = None,
+    ) -> Optional["Session"]:
         """Implementation of session retrieval."""
+        from google.adk.sessions.base_session_service import GetSessionConfig
+        
         db_session = self._get_db_session()
         try:
-            # Retrieve from database
             db_session_model = db_session.query(SQLSessionModel).filter(
                 SQLSessionModel.id == session_id,
                 SQLSessionModel.app_name == app_name,
@@ -181,13 +185,15 @@ class SQLSessionService(BaseCustomSessionService):
                 return None
             
             # Create session object
+            # Import Session inside the function to avoid circular import
+            from google.adk.sessions.session import Session
             session = Session(
                 id=db_session_model.id,
                 app_name=db_session_model.app_name,
                 user_id=db_session_model.user_id,
                 state=self._deserialize_state(db_session_model.state),
                 events=self._deserialize_events(db_session_model.events),
-                last_update_time=db_session_model.last_update_time
+                last_update_time=db_session_model.last_update_time.timestamp()
             )
             
             # Apply config filters if provided
@@ -212,8 +218,10 @@ class SQLSessionService(BaseCustomSessionService):
         *,
         app_name: str,
         user_id: str
-    ) -> ListSessionsResponse:
+    ) -> "ListSessionsResponse":
         """Implementation of session listing."""
+        from google.adk.sessions.base_session_service import ListSessionsResponse
+        
         db_session = self._get_db_session()
         try:
             # Retrieve all sessions for user (without events)
@@ -225,13 +233,15 @@ class SQLSessionService(BaseCustomSessionService):
             # Create session objects without events
             sessions = []
             for db_model in db_session_models:
+                # Import Session inside the function to avoid circular import
+                from google.adk.sessions.session import Session
                 session = Session(
                     id=db_model.id,
                     app_name=db_model.app_name,
                     user_id=db_model.user_id,
                     state=self._deserialize_state(db_model.state),
                     events=[],  # Empty events for listing
-                    last_update_time=db_model.last_update_time
+                    last_update_time=db_model.last_update_time.timestamp()
                 )
                 sessions.append(session)
             
@@ -265,7 +275,7 @@ class SQLSessionService(BaseCustomSessionService):
         finally:
             db_session.close()
 
-    async def _append_event_impl(self, session: Session, event: Event) -> None:
+    async def _append_event_impl(self, session: "Session", event: Event) -> None:
         """Implementation of event appending."""
         db_session = self._get_db_session()
         try:
@@ -281,7 +291,7 @@ class SQLSessionService(BaseCustomSessionService):
             
             # Update the session model
             db_session_model.events = self._serialize_events(session.events)
-            db_session_model.last_update_time = session.last_update_time
+            db_session_model.last_update_time = datetime.fromtimestamp(session.last_update_time, tz=timezone.utc)
             
             # Apply state changes from event if present
             if event.actions and event.actions.state_delta:

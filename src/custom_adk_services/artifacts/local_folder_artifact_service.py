@@ -5,7 +5,7 @@ import json
 import base64
 from typing import Optional, List
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from google.genai import types
 from .base_custom_artifact_service import BaseCustomArtifactService
@@ -102,7 +102,7 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
             version_info = {
                 "version": version,
                 "mime_type": mime_type,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "data_file": data_file.name
             }
             metadata["versions"].append(version_info)

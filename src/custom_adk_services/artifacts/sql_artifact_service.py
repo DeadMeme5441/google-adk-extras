@@ -2,12 +2,11 @@
 
 import json
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
-    from sqlalchemy import create_engine, Column, String, Text, Integer, DateTime, LargeBinary, text
-    from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import create_engine, Column, String, Text, Integer, DateTime, LargeBinary
+    from sqlalchemy.orm import declarative_base, sessionmaker
     from sqlalchemy.exc import SQLAlchemyError
 except ImportError:
     raise ImportError(
@@ -19,6 +18,7 @@ from google.genai import types
 from .base_custom_artifact_service import BaseCustomArtifactService
 
 
+# Use the modern declarative_base import
 Base = declarative_base()
 
 
@@ -36,7 +36,7 @@ class SQLArtifactModel(Base):
     # Artifact data
     mime_type = Column(String, nullable=False)
     data = Column(LargeBinary, nullable=False)  # Blob data
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     
     # Metadata
     metadata_json = Column(Text, nullable=True)  # Additional metadata as JSON
