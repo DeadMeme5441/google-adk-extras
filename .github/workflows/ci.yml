@@ -25,10 +25,10 @@ jobs:
       run: |
         pip install uv
 
-    - name: Install dependencies including dev dependencies
+    - name: Install dependencies including Google ADK and test dependencies
       run: |
         uv sync
-        uv pip install pytest pytest-asyncio
+        uv pip install pytest pytest-asyncio google-genai
 
     - name: Run tests
       run: |
@@ -48,10 +48,10 @@ jobs:
       run: |
         pip install uv
 
-    - name: Install dependencies including dev dependencies
+    - name: Install dependencies including Google ADK and test dependencies
       run: |
         uv sync
-        uv pip install pytest pytest-asyncio
+        uv pip install pytest pytest-asyncio google-genai
 
     - name: Run linting
       run: |
