@@ -18,13 +18,18 @@ logger = logging.getLogger('google_adk_extras.' + __name__)
 
 
 class YamlFileMemoryService(BaseCustomMemoryService):
-    """YAML file-based memory service implementation."""
+    """YAML file-based memory service implementation.
+
+    This service stores memory entries in YAML files in a hierarchical directory structure.
+    Each memory entry is stored in a separate YAML file organized by app name and user ID.
+    Memory entries are searchable by extracting and indexing text content from conversation events.
+    """
 
     def __init__(self, base_directory: str = "./memory"):
         """Initialize the YAML file memory service.
         
         Args:
-            base_directory: Base directory for storing memory files
+            base_directory: Base directory for storing memory files. Defaults to "./memory".
         """
         super().__init__()
         self.base_directory = Path(base_directory)
@@ -32,7 +37,10 @@ class YamlFileMemoryService(BaseCustomMemoryService):
         self.base_directory.mkdir(parents=True, exist_ok=True)
 
     async def _initialize_impl(self) -> None:
-        """Initialize the file system memory service."""
+        """Initialize the file system memory service.
+        
+        Ensures the base directory exists.
+        """
         # Ensure base directory exists
         self.base_directory.mkdir(parents=True, exist_ok=True)
 
@@ -41,32 +49,76 @@ class YamlFileMemoryService(BaseCustomMemoryService):
         pass
 
     def _get_memory_directory(self, app_name: str, user_id: str) -> Path:
-        """Generate directory path for memory entries."""
+        """Generate directory path for memory entries.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            
+        Returns:
+            Path to the memory directory.
+        """
         directory = self.base_directory / app_name / user_id
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
     def _get_memory_file_path(self, app_name: str, user_id: str, memory_id: str) -> Path:
-        """Generate file path for a memory entry."""
+        """Generate file path for a memory entry.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            memory_id: The ID of the memory entry.
+            
+        Returns:
+            Path to the memory file.
+        """
         directory = self._get_memory_directory(app_name, user_id)
         return directory / f"{memory_id}.yaml"
 
     def _serialize_content(self, content: types.Content) -> dict:
-        """Serialize Content object to dictionary."""
+        """Serialize Content object to dictionary.
+        
+        Args:
+            content: The Content object to serialize.
+            
+        Returns:
+            Dictionary representation of the content.
+            
+        Raises:
+            ValueError: If serialization fails.
+        """
         try:
             return content.to_json_dict()
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to serialize content: {e}")
 
     def _deserialize_content(self, content_dict: dict) -> types.Content:
-        """Deserialize Content object from dictionary."""
+        """Deserialize Content object from dictionary.
+        
+        Args:
+            content_dict: Dictionary representation of the content.
+            
+        Returns:
+            The deserialized Content object.
+            
+        Raises:
+            ValueError: If deserialization fails.
+        """
         try:
             return types.Content(**content_dict)
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to deserialize content: {e}")
 
     def _extract_text_from_content(self, content: types.Content) -> str:
-        """Extract text content from a Content object for storage and search."""
+        """Extract text content from a Content object for storage and search.
+        
+        Args:
+            content: The Content object to extract text from.
+            
+        Returns:
+            Extracted text content.
+        """
         if not content or not content.parts:
             return ""
         
@@ -78,14 +130,28 @@ class YamlFileMemoryService(BaseCustomMemoryService):
         return " ".join(text_parts)
 
     def _extract_search_terms(self, text: str) -> List[str]:
-        """Extract search terms from text content."""
+        """Extract search terms from text content.
+        
+        Args:
+            text: The text to extract search terms from.
+            
+        Returns:
+            List of unique search terms.
+        """
         # Extract words from text and convert to lowercase
         words = re.findall(r'[A-Za-z]+', text.lower())
         # Return unique words as a list
         return sorted(set(words))
 
     async def _add_session_to_memory_impl(self, session: "Session") -> None:
-        """Implementation of adding a session to memory."""
+        """Implementation of adding a session to memory.
+        
+        Args:
+            session: The session to add to memory.
+            
+        Raises:
+            RuntimeError: If adding the session to memory fails.
+        """
         try:
             # Add each event in the session as a separate memory entry
             for event in session.events:
@@ -122,7 +188,19 @@ class YamlFileMemoryService(BaseCustomMemoryService):
     async def _search_memory_impl(
         self, *, app_name: str, user_id: str, query: str
     ) -> "SearchMemoryResponse":
-        """Implementation of searching memory."""
+        """Implementation of searching memory.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The id of the user.
+            query: The query to search for.
+            
+        Returns:
+            A SearchMemoryResponse containing the matching memories.
+            
+        Raises:
+            RuntimeError: If searching memory fails.
+        """
         from google.adk.memory.base_memory_service import SearchMemoryResponse
         from google.adk.memory.memory_entry import MemoryEntry
         

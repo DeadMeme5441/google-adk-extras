@@ -12,13 +12,17 @@ from .base_custom_artifact_service import BaseCustomArtifactService
 
 
 class LocalFolderArtifactService(BaseCustomArtifactService):
-    """Local folder-based artifact service implementation."""
+    """Local folder-based artifact service implementation.
+
+    This service stores artifacts in the local file system with full versioning support.
+    Each artifact is stored with its metadata in JSON format and binary data in separate files.
+    """
 
     def __init__(self, base_directory: str = "./artifacts"):
         """Initialize the local folder artifact service.
         
         Args:
-            base_directory: Base directory for storing artifacts
+            base_directory: Base directory for storing artifacts. Defaults to "./artifacts".
         """
         super().__init__()
         self.base_directory = Path(base_directory)
@@ -26,7 +30,10 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         self.base_directory.mkdir(parents=True, exist_ok=True)
 
     async def _initialize_impl(self) -> None:
-        """Initialize the file system artifact service."""
+        """Initialize the file system artifact service.
+        
+        Ensures the base directory exists.
+        """
         # Ensure base directory exists
         self.base_directory.mkdir(parents=True, exist_ok=True)
 
@@ -35,30 +42,78 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         pass
 
     def _get_artifact_directory(self, app_name: str, user_id: str, session_id: str) -> Path:
-        """Generate directory path for artifacts."""
+        """Generate directory path for artifacts.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            
+        Returns:
+            Path to the artifact directory.
+        """
         directory = self.base_directory / app_name / user_id / session_id
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
     def _get_artifact_file_path(self, app_name: str, user_id: str, session_id: str, filename: str) -> Path:
-        """Generate file path for artifact metadata."""
+        """Generate file path for artifact metadata.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file.
+            
+        Returns:
+            Path to the metadata file.
+        """
         directory = self._get_artifact_directory(app_name, user_id, session_id)
         return directory / f"{filename}.json"
 
     def _get_artifact_data_path(self, app_name: str, user_id: str, session_id: str, filename: str, version: int) -> Path:
-        """Generate file path for artifact data."""
+        """Generate file path for artifact data.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file.
+            version: The version number.
+            
+        Returns:
+            Path to the data file.
+        """
         directory = self._get_artifact_directory(app_name, user_id, session_id)
         return directory / f"{filename}.v{version}.data"
 
     def _serialize_blob(self, part: types.Part) -> tuple[bytes, str]:
-        """Extract blob data and mime type from a Part."""
+        """Extract blob data and mime type from a Part.
+        
+        Args:
+            part: The Part object containing the blob data.
+            
+        Returns:
+            A tuple of (data, mime_type).
+            
+        Raises:
+            ValueError: If the part type is not supported.
+        """
         if part.inline_data:
             return part.inline_data.data, part.inline_data.mime_type or "application/octet-stream"
         else:
             raise ValueError("Only inline_data parts are supported")
 
     def _deserialize_blob(self, data: bytes, mime_type: str) -> types.Part:
-        """Create a Part from blob data and mime type."""
+        """Create a Part from blob data and mime type.
+        
+        Args:
+            data: The binary data.
+            mime_type: The MIME type of the data.
+            
+        Returns:
+            A Part object containing the blob data.
+        """
         blob = types.Blob(data=data, mime_type=mime_type)
         return types.Part(inline_data=blob)
 
@@ -71,7 +126,22 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         filename: str,
         artifact: types.Part,
     ) -> int:
-        """Implementation of artifact saving."""
+        """Implementation of artifact saving.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to save.
+            artifact: The artifact to save.
+            
+        Returns:
+            The version number of the saved artifact.
+            
+        Raises:
+            RuntimeError: If saving the artifact fails.
+            ValueError: If the artifact type is not supported.
+        """
         try:
             # Extract blob data
             data, mime_type = self._serialize_blob(artifact)
@@ -124,7 +194,22 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         filename: str,
         version: Optional[int] = None,
     ) -> Optional[types.Part]:
-        """Implementation of artifact loading."""
+        """Implementation of artifact loading.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to load.
+            version: Optional version number to load. If not provided,
+                the latest version will be loaded.
+                
+        Returns:
+            The loaded artifact if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If loading the artifact fails.
+        """
         try:
             # Load metadata
             metadata_file = self._get_artifact_file_path(app_name, user_id, session_id, filename)
@@ -173,7 +258,19 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         user_id: str,
         session_id: str,
     ) -> List[str]:
-        """Implementation of artifact key listing."""
+        """Implementation of artifact key listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            
+        Returns:
+            A list of artifact keys (filenames).
+            
+        Raises:
+            RuntimeError: If listing artifact keys fails.
+        """
         try:
             directory = self._get_artifact_directory(app_name, user_id, session_id)
             
@@ -197,7 +294,17 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         session_id: str,
         filename: str,
     ) -> None:
-        """Implementation of artifact deletion."""
+        """Implementation of artifact deletion.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to delete.
+            
+        Raises:
+            RuntimeError: If deleting the artifact fails.
+        """
         try:
             # Load metadata to find all version files
             metadata_file = self._get_artifact_file_path(app_name, user_id, session_id, filename)
@@ -226,7 +333,20 @@ class LocalFolderArtifactService(BaseCustomArtifactService):
         session_id: str,
         filename: str,
     ) -> List[int]:
-        """Implementation of version listing."""
+        """Implementation of version listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to list versions for.
+            
+        Returns:
+            A list of version numbers.
+            
+        Raises:
+            RuntimeError: If listing versions fails.
+        """
         try:
             metadata_file = self._get_artifact_file_path(app_name, user_id, session_id, filename)
             

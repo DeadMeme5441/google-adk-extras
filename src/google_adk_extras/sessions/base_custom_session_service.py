@@ -10,7 +10,11 @@ from google.adk.sessions.base_session_service import GetSessionConfig, ListSessi
 
 
 class BaseCustomSessionService(BaseSessionService, abc.ABC):
-    """Base class for custom session services with common functionality."""
+    """Base class for custom session services with common functionality.
+
+    This abstract base class provides a foundation for implementing custom
+    session services with automatic initialization and cleanup handling.
+    """
 
     def __init__(self):
         """Initialize the base custom session service."""
@@ -22,6 +26,9 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         
         This method should be called before using the service to ensure
         any required setup (database connections, etc.) is complete.
+        
+        Raises:
+            RuntimeError: If initialization fails.
         """
         if not self._initialized:
             await self._initialize_impl()
@@ -33,6 +40,9 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         
         This method should handle any setup required for the service to function,
         such as database connections, creating tables, etc.
+        
+        Raises:
+            RuntimeError: If initialization fails.
         """
         pass
 
@@ -63,7 +73,21 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         state: Optional[dict[str, Any]] = None,
         session_id: Optional[str] = None,
     ) -> Session:
-        """Create a new session."""
+        """Create a new session.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            state: Optional initial state for the session.
+            session_id: Optional specific ID for the session. If not provided,
+                a UUID will be generated.
+                
+        Returns:
+            The created Session object.
+            
+        Raises:
+            RuntimeError: If session creation fails.
+        """
         if not self._initialized:
             await self.initialize()
         return await self._create_session_impl(
@@ -81,7 +105,20 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         session_id: str,
         config: Optional[GetSessionConfig] = None,
     ) -> Optional[Session]:
-        """Get a session by ID."""
+        """Get a session by ID.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to retrieve.
+            config: Optional configuration for session retrieval.
+            
+        Returns:
+            The Session object if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If session retrieval fails.
+        """
         if not self._initialized:
             await self.initialize()
         return await self._get_session_impl(
@@ -97,7 +134,18 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         app_name: str,
         user_id: str
     ) -> ListSessionsResponse:
-        """List all sessions for a user."""
+        """List all sessions for a user.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            
+        Returns:
+            A ListSessionsResponse containing the sessions.
+            
+        Raises:
+            RuntimeError: If session listing fails.
+        """
         if not self._initialized:
             await self.initialize()
         return await self._list_sessions_impl(
@@ -112,7 +160,16 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         user_id: str,
         session_id: str
     ) -> None:
-        """Delete a session."""
+        """Delete a session.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to delete.
+            
+        Raises:
+            RuntimeError: If session deletion fails.
+        """
         if not self._initialized:
             await self.initialize()
         await self._delete_session_impl(
@@ -122,7 +179,18 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         )
 
     async def append_event(self, session: Session, event: Event) -> Event:
-        """Append an event to a session."""
+        """Append an event to a session.
+        
+        Args:
+            session: The session to append the event to.
+            event: The event to append.
+            
+        Returns:
+            The appended event.
+            
+        Raises:
+            RuntimeError: If appending the event fails.
+        """
         if not self._initialized:
             await self.initialize()
         # Update the session object
@@ -141,7 +209,20 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         state: Optional[dict[str, Any]] = None,
         session_id: Optional[str] = None,
     ) -> Session:
-        """Implementation of session creation."""
+        """Implementation of session creation.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            state: Optional initial state for the session.
+            session_id: Optional specific ID for the session.
+            
+        Returns:
+            The created Session object.
+            
+        Raises:
+            RuntimeError: If session creation fails.
+        """
         pass
 
     @abc.abstractmethod
@@ -153,7 +234,20 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         session_id: str,
         config: Optional[GetSessionConfig] = None,
     ) -> Optional[Session]:
-        """Implementation of session retrieval."""
+        """Implementation of session retrieval.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to retrieve.
+            config: Optional configuration for session retrieval.
+            
+        Returns:
+            The Session object if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If session retrieval fails.
+        """
         pass
 
     @abc.abstractmethod
@@ -163,7 +257,18 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         app_name: str,
         user_id: str
     ) -> ListSessionsResponse:
-        """Implementation of session listing."""
+        """Implementation of session listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            
+        Returns:
+            A ListSessionsResponse containing the sessions.
+            
+        Raises:
+            RuntimeError: If session listing fails.
+        """
         pass
 
     @abc.abstractmethod
@@ -174,10 +279,27 @@ class BaseCustomSessionService(BaseSessionService, abc.ABC):
         user_id: str,
         session_id: str
     ) -> None:
-        """Implementation of session deletion."""
+        """Implementation of session deletion.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to delete.
+            
+        Raises:
+            RuntimeError: If session deletion fails.
+        """
         pass
 
     @abc.abstractmethod
     async def _append_event_impl(self, session: Session, event: Event) -> None:
-        """Implementation of event appending."""
+        """Implementation of event appending.
+        
+        Args:
+            session: The session to append the event to.
+            event: The event to append.
+            
+        Raises:
+            RuntimeError: If appending the event fails.
+        """
         pass

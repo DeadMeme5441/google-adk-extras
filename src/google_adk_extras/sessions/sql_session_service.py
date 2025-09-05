@@ -43,7 +43,11 @@ class SQLSessionModel(Base):
 
 
 class SQLSessionService(BaseCustomSessionService):
-    """SQL-based session service implementation."""
+    """SQL-based session service implementation.
+
+    This service stores sessions in a SQL database using SQLAlchemy.
+    It supports various SQL databases including SQLite, PostgreSQL, and MySQL.
+    """
 
     def __init__(self, database_url: str):
         """Initialize the SQL session service.
@@ -57,7 +61,11 @@ class SQLSessionService(BaseCustomSessionService):
         self.session_local: Optional[object] = None
 
     async def _initialize_impl(self) -> None:
-        """Initialize the database connection and create tables."""
+        """Initialize the database connection and create tables.
+        
+        Raises:
+            RuntimeError: If database initialization fails.
+        """
         try:
             self.engine = create_engine(self.database_url)
             Base.metadata.create_all(self.engine)
@@ -77,27 +85,64 @@ class SQLSessionService(BaseCustomSessionService):
         self.session_local = None
 
     def _get_db_session(self):
-        """Get a database session."""
+        """Get a database session.
+        
+        Returns:
+            A database session object.
+            
+        Raises:
+            RuntimeError: If the service is not initialized.
+        """
         if not self.session_local:
             raise RuntimeError("Service not initialized")
         return self.session_local()
 
     def _serialize_state(self, state: dict[str, Any]) -> str:
-        """Serialize session state to JSON string."""
+        """Serialize session state to JSON string.
+        
+        Args:
+            state: The state dictionary to serialize.
+            
+        Returns:
+            JSON string representation of the state.
+            
+        Raises:
+            ValueError: If serialization fails.
+        """
         try:
             return json.dumps(state)
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to serialize state: {e}")
 
     def _deserialize_state(self, state_str: str) -> dict[str, Any]:
-        """Deserialize session state from JSON string."""
+        """Deserialize session state from JSON string.
+        
+        Args:
+            state_str: JSON string representation of the state.
+            
+        Returns:
+            The deserialized state dictionary.
+            
+        Raises:
+            ValueError: If deserialization fails.
+        """
         try:
             return json.loads(state_str) if state_str else {}
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to deserialize state: {e}")
 
     def _serialize_events(self, events: list[Event]) -> str:
-        """Serialize events to JSON string."""
+        """Serialize events to JSON string.
+        
+        Args:
+            events: List of events to serialize.
+            
+        Returns:
+            JSON string representation of the events.
+            
+        Raises:
+            ValueError: If serialization fails.
+        """
         try:
             # Convert events to dictionaries
             event_dicts = [event.model_dump() for event in events]
@@ -106,7 +151,17 @@ class SQLSessionService(BaseCustomSessionService):
             raise ValueError(f"Failed to serialize events: {e}")
 
     def _deserialize_events(self, events_str: str) -> list[Event]:
-        """Deserialize events from JSON string."""
+        """Deserialize events from JSON string.
+        
+        Args:
+            events_str: JSON string representation of the events.
+            
+        Returns:
+            List of deserialized events.
+            
+        Raises:
+            ValueError: If deserialization fails.
+        """
         try:
             event_dicts = json.loads(events_str) if events_str else []
             return [Event(**event_dict) for event_dict in event_dicts]
@@ -121,7 +176,20 @@ class SQLSessionService(BaseCustomSessionService):
         state: Optional[dict[str, Any]] = None,
         session_id: Optional[str] = None,
     ) -> "Session":
-        """Implementation of session creation."""
+        """Implementation of session creation.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            state: Optional initial state for the session.
+            session_id: Optional specific ID for the session.
+            
+        Returns:
+            The created Session object.
+            
+        Raises:
+            RuntimeError: If session creation fails.
+        """
         # Import Session inside the function to avoid circular import
         from google.adk.sessions.session import Session
         import time
@@ -170,7 +238,20 @@ class SQLSessionService(BaseCustomSessionService):
         session_id: str,
         config: Optional["GetSessionConfig"] = None,
     ) -> Optional["Session"]:
-        """Implementation of session retrieval."""
+        """Implementation of session retrieval.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to retrieve.
+            config: Optional configuration for session retrieval.
+            
+        Returns:
+            The Session object if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If session retrieval fails.
+        """
         from google.adk.sessions.base_session_service import GetSessionConfig
         
         db_session = self._get_db_session()
@@ -219,7 +300,18 @@ class SQLSessionService(BaseCustomSessionService):
         app_name: str,
         user_id: str
     ) -> "ListSessionsResponse":
-        """Implementation of session listing."""
+        """Implementation of session listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            
+        Returns:
+            A ListSessionsResponse containing the sessions.
+            
+        Raises:
+            RuntimeError: If session listing fails.
+        """
         from google.adk.sessions.base_session_service import ListSessionsResponse
         
         db_session = self._get_db_session()
@@ -258,7 +350,16 @@ class SQLSessionService(BaseCustomSessionService):
         user_id: str,
         session_id: str
     ) -> None:
-        """Implementation of session deletion."""
+        """Implementation of session deletion.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to delete.
+            
+        Raises:
+            RuntimeError: If session deletion fails.
+        """
         db_session = self._get_db_session()
         try:
             # Delete from database
@@ -276,7 +377,16 @@ class SQLSessionService(BaseCustomSessionService):
             db_session.close()
 
     async def _append_event_impl(self, session: "Session", event: Event) -> None:
-        """Implementation of event appending."""
+        """Implementation of event appending.
+        
+        Args:
+            session: The session to append the event to.
+            event: The event to append.
+            
+        Raises:
+            RuntimeError: If appending the event fails.
+            ValueError: If the session is not found.
+        """
         db_session = self._get_db_session()
         try:
             # Update session in database

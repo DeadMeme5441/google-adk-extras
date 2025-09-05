@@ -43,7 +43,12 @@ class SQLArtifactModel(Base):
 
 
 class SQLArtifactService(BaseCustomArtifactService):
-    """SQL-based artifact service implementation."""
+    """SQL-based artifact service implementation.
+
+    This service stores artifacts in a SQL database using SQLAlchemy.
+    It supports various SQL databases including SQLite, PostgreSQL, and MySQL.
+    Artifacts are stored with full versioning support.
+    """
 
     def __init__(self, database_url: str):
         """Initialize the SQL artifact service.
@@ -57,7 +62,11 @@ class SQLArtifactService(BaseCustomArtifactService):
         self.session_local: Optional[object] = None
 
     async def _initialize_impl(self) -> None:
-        """Initialize the database connection and create tables."""
+        """Initialize the database connection and create tables.
+        
+        Raises:
+            RuntimeError: If database initialization fails.
+        """
         try:
             self.engine = create_engine(self.database_url)
             Base.metadata.create_all(self.engine)
@@ -77,13 +86,30 @@ class SQLArtifactService(BaseCustomArtifactService):
         self.session_local = None
 
     def _get_db_session(self):
-        """Get a database session."""
+        """Get a database session.
+        
+        Returns:
+            A database session object.
+            
+        Raises:
+            RuntimeError: If the service is not initialized.
+        """
         if not self.session_local:
             raise RuntimeError("Service not initialized")
         return self.session_local()
 
     def _serialize_blob(self, part: types.Part) -> tuple[bytes, str]:
-        """Extract blob data and mime type from a Part."""
+        """Extract blob data and mime type from a Part.
+        
+        Args:
+            part: The Part object containing the blob data.
+            
+        Returns:
+            A tuple of (data, mime_type).
+            
+        Raises:
+            ValueError: If the part type is not supported.
+        """
         if part.inline_data:
             return part.inline_data.data, part.inline_data.mime_type or "application/octet-stream"
         else:
@@ -93,7 +119,15 @@ class SQLArtifactService(BaseCustomArtifactService):
             raise ValueError("Only inline_data parts are supported")
 
     def _deserialize_blob(self, data: bytes, mime_type: str) -> types.Part:
-        """Create a Part from blob data and mime type."""
+        """Create a Part from blob data and mime type.
+        
+        Args:
+            data: The binary data.
+            mime_type: The MIME type of the data.
+            
+        Returns:
+            A Part object containing the blob data.
+        """
         blob = types.Blob(data=data, mime_type=mime_type)
         return types.Part(inline_data=blob)
 
@@ -106,7 +140,22 @@ class SQLArtifactService(BaseCustomArtifactService):
         filename: str,
         artifact: types.Part,
     ) -> int:
-        """Implementation of artifact saving."""
+        """Implementation of artifact saving.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to save.
+            artifact: The artifact to save.
+            
+        Returns:
+            The version number of the saved artifact.
+            
+        Raises:
+            RuntimeError: If saving the artifact fails.
+            ValueError: If the artifact type is not supported.
+        """
         db_session = self._get_db_session()
         try:
             # Extract blob data
@@ -153,7 +202,22 @@ class SQLArtifactService(BaseCustomArtifactService):
         filename: str,
         version: Optional[int] = None,
     ) -> Optional[types.Part]:
-        """Implementation of artifact loading."""
+        """Implementation of artifact loading.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to load.
+            version: Optional version number to load. If not provided,
+                the latest version will be loaded.
+                
+        Returns:
+            The loaded artifact if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If loading the artifact fails.
+        """
         db_session = self._get_db_session()
         try:
             query = db_session.query(SQLArtifactModel).filter(
@@ -188,7 +252,19 @@ class SQLArtifactService(BaseCustomArtifactService):
         user_id: str,
         session_id: str,
     ) -> List[str]:
-        """Implementation of artifact key listing."""
+        """Implementation of artifact key listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            
+        Returns:
+            A list of artifact keys (filenames).
+            
+        Raises:
+            RuntimeError: If listing artifact keys fails.
+        """
         db_session = self._get_db_session()
         try:
             # Get distinct filenames
@@ -212,7 +288,17 @@ class SQLArtifactService(BaseCustomArtifactService):
         session_id: str,
         filename: str,
     ) -> None:
-        """Implementation of artifact deletion."""
+        """Implementation of artifact deletion.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to delete.
+            
+        Raises:
+            RuntimeError: If deleting the artifact fails.
+        """
         db_session = self._get_db_session()
         try:
             # Delete all versions of the artifact
@@ -238,7 +324,20 @@ class SQLArtifactService(BaseCustomArtifactService):
         session_id: str,
         filename: str,
     ) -> List[int]:
-        """Implementation of version listing."""
+        """Implementation of version listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to list versions for.
+            
+        Returns:
+            A list of version numbers.
+            
+        Raises:
+            RuntimeError: If listing versions fails.
+        """
         db_session = self._get_db_session()
         try:
             versions = db_session.query(SQLArtifactModel.version).filter(

@@ -10,7 +10,11 @@ if TYPE_CHECKING:
 
 
 class BaseCustomMemoryService(BaseMemoryService):
-    """Base class for custom memory services with common functionality."""
+    """Base class for custom memory services with common functionality.
+
+    This abstract base class provides a foundation for implementing custom
+    memory services with automatic initialization and cleanup handling.
+    """
 
     def __init__(self):
         """Initialize the base custom memory service."""
@@ -23,6 +27,9 @@ class BaseCustomMemoryService(BaseMemoryService):
         
         Args:
             session: The session to add to memory.
+            
+        Raises:
+            RuntimeError: If adding the session to memory fails.
         """
 
     @abstractmethod
@@ -38,6 +45,9 @@ class BaseCustomMemoryService(BaseMemoryService):
             
         Returns:
             A SearchMemoryResponse containing the matching memories.
+            
+        Raises:
+            RuntimeError: If searching memory fails.
         """
 
     async def add_session_to_memory(self, session: "Session") -> None:
@@ -45,6 +55,9 @@ class BaseCustomMemoryService(BaseMemoryService):
         
         Args:
             session: The session to add.
+            
+        Raises:
+            RuntimeError: If adding the session to memory fails.
         """
         if not self._initialized:
             await self.initialize()
@@ -62,6 +75,9 @@ class BaseCustomMemoryService(BaseMemoryService):
             
         Returns:
             A SearchMemoryResponse containing the matching memories.
+            
+        Raises:
+            RuntimeError: If searching memory fails.
         """
         if not self._initialized:
             await self.initialize()
@@ -70,21 +86,37 @@ class BaseCustomMemoryService(BaseMemoryService):
         )
 
     async def initialize(self) -> None:
-        """Initialize the memory service."""
+        """Initialize the memory service.
+        
+        Raises:
+            RuntimeError: If initialization fails.
+        """
         if not self._initialized:
             await self._initialize_impl()
             self._initialized = True
 
     async def cleanup(self) -> None:
-        """Clean up the memory service."""
+        """Clean up the memory service.
+        
+        Raises:
+            RuntimeError: If cleanup fails.
+        """
         if self._initialized:
             await self._cleanup_impl()
             self._initialized = False
 
     @abstractmethod
     async def _initialize_impl(self) -> None:
-        """Implementation of initialization."""
+        """Implementation of initialization.
+        
+        Raises:
+            RuntimeError: If initialization fails.
+        """
 
     @abstractmethod
     async def _cleanup_impl(self) -> None:
-        """Implementation of cleanup."""
+        """Implementation of cleanup.
+        
+        Raises:
+            RuntimeError: If cleanup fails.
+        """

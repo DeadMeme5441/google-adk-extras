@@ -3,7 +3,7 @@
 import json
 import base64
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import boto3
@@ -19,7 +19,12 @@ from .base_custom_artifact_service import BaseCustomArtifactService
 
 
 class S3ArtifactService(BaseCustomArtifactService):
-    """S3-compatible artifact service implementation."""
+    """S3-compatible artifact service implementation.
+
+    This service stores artifacts in AWS S3 or S3-compatible storage services.
+    It supports versioning and works with any S3-compatible service including
+    AWS S3, MinIO, Google Cloud Storage, etc.
+    """
 
     def __init__(
         self,
@@ -33,12 +38,12 @@ class S3ArtifactService(BaseCustomArtifactService):
         """Initialize the S3 artifact service.
         
         Args:
-            bucket_name: S3 bucket name
-            endpoint_url: S3 endpoint URL (for non-AWS S3 services)
-            region_name: AWS region name
-            aws_access_key_id: AWS access key ID
-            aws_secret_access_key: AWS secret access key
-            prefix: Prefix for artifact storage paths
+            bucket_name: S3 bucket name.
+            endpoint_url: S3 endpoint URL (for non-AWS S3 services like MinIO).
+            region_name: AWS region name.
+            aws_access_key_id: AWS access key ID.
+            aws_secret_access_key: AWS secret access key.
+            prefix: Prefix for artifact storage paths. Defaults to "adk-artifacts".
         """
         super().__init__()
         self.bucket_name = bucket_name
@@ -50,7 +55,14 @@ class S3ArtifactService(BaseCustomArtifactService):
         self.s3_client = None
 
     async def _initialize_impl(self) -> None:
-        """Initialize the S3 client."""
+        """Initialize the S3 client.
+        
+        Creates the S3 client and verifies the bucket exists (or creates it).
+        
+        Raises:
+            RuntimeError: If S3 initialization fails.
+            NoCredentialsError: If AWS credentials are not found.
+        """
         try:
             # Create S3 client
             self.s3_client = boto3.client(
@@ -88,22 +100,61 @@ class S3ArtifactService(BaseCustomArtifactService):
             self.s3_client = None
 
     def _get_artifact_key(self, app_name: str, user_id: str, session_id: str, filename: str) -> str:
-        """Generate S3 key for artifact metadata."""
+        """Generate S3 key for artifact metadata.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file.
+            
+        Returns:
+            S3 key for the metadata file.
+        """
         return f"{self.prefix}/{app_name}/{user_id}/{session_id}/{filename}.json"
 
     def _get_artifact_data_key(self, app_name: str, user_id: str, session_id: str, filename: str, version: int) -> str:
-        """Generate S3 key for artifact data."""
+        """Generate S3 key for artifact data.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file.
+            version: The version number.
+            
+        Returns:
+            S3 key for the data file.
+        """
         return f"{self.prefix}/{app_name}/{user_id}/{session_id}/{filename}.v{version}.data"
 
     def _serialize_blob(self, part: types.Part) -> tuple[bytes, str]:
-        """Extract blob data and mime type from a Part."""
+        """Extract blob data and mime type from a Part.
+        
+        Args:
+            part: The Part object containing the blob data.
+            
+        Returns:
+            A tuple of (data, mime_type).
+            
+        Raises:
+            ValueError: If the part type is not supported.
+        """
         if part.inline_data:
             return part.inline_data.data, part.inline_data.mime_type or "application/octet-stream"
         else:
             raise ValueError("Only inline_data parts are supported")
 
     def _deserialize_blob(self, data: bytes, mime_type: str) -> types.Part:
-        """Create a Part from blob data and mime type."""
+        """Create a Part from blob data and mime type.
+        
+        Args:
+            data: The binary data.
+            mime_type: The MIME type of the data.
+            
+        Returns:
+            A Part object containing the blob data.
+        """
         blob = types.Blob(data=data, mime_type=mime_type)
         return types.Part(inline_data=blob)
 
@@ -116,7 +167,22 @@ class S3ArtifactService(BaseCustomArtifactService):
         filename: str,
         artifact: types.Part,
     ) -> int:
-        """Implementation of artifact saving."""
+        """Implementation of artifact saving.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to save.
+            artifact: The artifact to save.
+            
+        Returns:
+            The version number of the saved artifact.
+            
+        Raises:
+            RuntimeError: If saving the artifact fails.
+            ValueError: If the artifact type is not supported.
+        """
         try:
             # Extract blob data
             data, mime_type = self._serialize_blob(artifact)
@@ -155,7 +221,7 @@ class S3ArtifactService(BaseCustomArtifactService):
             version_info = {
                 "version": version,
                 "mime_type": mime_type,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "data_key": data_key
             }
             metadata["versions"].append(version_info)
@@ -180,7 +246,22 @@ class S3ArtifactService(BaseCustomArtifactService):
         filename: str,
         version: Optional[int] = None,
     ) -> Optional[types.Part]:
-        """Implementation of artifact loading."""
+        """Implementation of artifact loading.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to load.
+            version: Optional version number to load. If not provided,
+                the latest version will be loaded.
+                
+        Returns:
+            The loaded artifact if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If loading the artifact fails.
+        """
         try:
             # Load metadata
             metadata_key = self._get_artifact_key(app_name, user_id, session_id, filename)
@@ -237,7 +318,19 @@ class S3ArtifactService(BaseCustomArtifactService):
         user_id: str,
         session_id: str,
     ) -> List[str]:
-        """Implementation of artifact key listing."""
+        """Implementation of artifact key listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            
+        Returns:
+            A list of artifact keys (filenames).
+            
+        Raises:
+            RuntimeError: If listing artifact keys fails.
+        """
         try:
             # List objects with the prefix
             prefix = f"{self.prefix}/{app_name}/{user_id}/{session_id}/"
@@ -269,7 +362,17 @@ class S3ArtifactService(BaseCustomArtifactService):
         session_id: str,
         filename: str,
     ) -> None:
-        """Implementation of artifact deletion."""
+        """Implementation of artifact deletion.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to delete.
+            
+        Raises:
+            RuntimeError: If deleting the artifact fails.
+        """
         try:
             # Load metadata to find all version files
             metadata_key = self._get_artifact_key(app_name, user_id, session_id, filename)
@@ -304,7 +407,20 @@ class S3ArtifactService(BaseCustomArtifactService):
         session_id: str,
         filename: str,
     ) -> List[int]:
-        """Implementation of version listing."""
+        """Implementation of version listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            filename: The name of the file to list versions for.
+            
+        Returns:
+            A list of version numbers.
+            
+        Raises:
+            RuntimeError: If listing versions fails.
+        """
         try:
             metadata_key = self._get_artifact_key(app_name, user_id, session_id, filename)
             

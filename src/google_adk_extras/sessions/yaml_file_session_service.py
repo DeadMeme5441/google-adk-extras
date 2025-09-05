@@ -23,13 +23,17 @@ from .base_custom_session_service import BaseCustomSessionService
 
 
 class YamlFileSessionService(BaseCustomSessionService):
-    """YAML file-based session service implementation."""
+    """YAML file-based session service implementation.
+
+    This service stores sessions in YAML files in a hierarchical directory structure.
+    Each session is stored in a separate YAML file organized by app name and user ID.
+    """
 
     def __init__(self, base_directory: str = "./sessions"):
         """Initialize the YAML file session service.
         
         Args:
-            base_directory: Base directory for storing session files
+            base_directory: Base directory for storing session files. Defaults to "./sessions".
         """
         super().__init__()
         self.base_directory = Path(base_directory)
@@ -37,7 +41,10 @@ class YamlFileSessionService(BaseCustomSessionService):
         self.base_directory.mkdir(parents=True, exist_ok=True)
 
     async def _initialize_impl(self) -> None:
-        """Initialize the file system session service."""
+        """Initialize the file system session service.
+        
+        Ensures the base directory exists.
+        """
         # Ensure base directory exists
         self.base_directory.mkdir(parents=True, exist_ok=True)
 
@@ -46,7 +53,16 @@ class YamlFileSessionService(BaseCustomSessionService):
         pass
 
     def _get_session_file_path(self, app_name: str, user_id: str, session_id: str) -> Path:
-        """Generate file path for a session."""
+        """Generate file path for a session.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session.
+            
+        Returns:
+            Path to the session file.
+        """
         # Create app directory
         app_dir = self.base_directory / app_name
         app_dir.mkdir(exist_ok=True)
@@ -59,19 +75,48 @@ class YamlFileSessionService(BaseCustomSessionService):
         return user_dir / f"{session_id}.yaml"
 
     def _get_user_directory(self, app_name: str, user_id: str) -> Path:
-        """Get the directory path for a user's sessions."""
+        """Get the directory path for a user's sessions.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            
+        Returns:
+            Path to the user's session directory.
+        """
         return self.base_directory / app_name / user_id
 
     def _serialize_events(self, events: list[Event]) -> list[dict]:
-        """Serialize events to dictionaries."""
+        """Serialize events to dictionaries.
+        
+        Args:
+            events: List of Event objects to serialize.
+            
+        Returns:
+            List of dictionaries representing the events.
+        """
         return [event.model_dump() for event in events]
 
     def _deserialize_events(self, event_dicts: list[dict]) -> list[Event]:
-        """Deserialize events from dictionaries."""
+        """Deserialize events from dictionaries.
+        
+        Args:
+            event_dicts: List of dictionaries representing events.
+            
+        Returns:
+            List of Event objects.
+        """
         return [Event(**event_dict) for event_dict in event_dicts]
 
     def _session_to_dict(self, session: Session) -> dict:
-        """Convert session to dictionary for YAML serialization."""
+        """Convert session to dictionary for YAML serialization.
+        
+        Args:
+            session: The Session object to convert.
+            
+        Returns:
+            Dictionary representation of the session.
+        """
         return {
             "id": session.id,
             "app_name": session.app_name,
@@ -82,7 +127,14 @@ class YamlFileSessionService(BaseCustomSessionService):
         }
 
     def _dict_to_session(self, data: dict) -> Session:
-        """Convert dictionary to session object."""
+        """Convert dictionary to session object.
+        
+        Args:
+            data: Dictionary representation of the session.
+            
+        Returns:
+            Session object.
+        """
         return Session(
             id=data["id"],
             app_name=data["app_name"],
@@ -100,7 +152,21 @@ class YamlFileSessionService(BaseCustomSessionService):
         state: Optional[dict[str, Any]] = None,
         session_id: Optional[str] = None,
     ) -> Session:
-        """Implementation of session creation."""
+        """Implementation of session creation.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            state: Optional initial state for the session.
+            session_id: Optional specific ID for the session. If not provided,
+                a UUID will be generated.
+                
+        Returns:
+            The created Session object.
+            
+        Raises:
+            RuntimeError: If session creation fails.
+        """
         # Generate session ID if not provided
         session_id = session_id or str(uuid.uuid4())
         
@@ -134,7 +200,20 @@ class YamlFileSessionService(BaseCustomSessionService):
         session_id: str,
         config: Optional[GetSessionConfig] = None,
     ) -> Optional[Session]:
-        """Implementation of session retrieval."""
+        """Implementation of session retrieval.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to retrieve.
+            config: Optional configuration for session retrieval.
+            
+        Returns:
+            The Session object if found, None otherwise.
+            
+        Raises:
+            RuntimeError: If session retrieval fails.
+        """
         file_path = self._get_session_file_path(app_name, user_id, session_id)
         
         # Check if file exists
@@ -170,7 +249,18 @@ class YamlFileSessionService(BaseCustomSessionService):
         app_name: str,
         user_id: str
     ) -> ListSessionsResponse:
-        """Implementation of session listing."""
+        """Implementation of session listing.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            
+        Returns:
+            A ListSessionsResponse containing the sessions.
+            
+        Raises:
+            RuntimeError: If session listing fails.
+        """
         user_dir = self._get_user_directory(app_name, user_id)
         
         # Check if user directory exists
@@ -207,7 +297,16 @@ class YamlFileSessionService(BaseCustomSessionService):
         user_id: str,
         session_id: str
     ) -> None:
-        """Implementation of session deletion."""
+        """Implementation of session deletion.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The ID of the user.
+            session_id: The ID of the session to delete.
+            
+        Raises:
+            RuntimeError: If session deletion fails.
+        """
         file_path = self._get_session_file_path(app_name, user_id, session_id)
         
         # Delete file if it exists
@@ -218,7 +317,16 @@ class YamlFileSessionService(BaseCustomSessionService):
                 raise RuntimeError(f"Failed to delete session file: {e}")
 
     async def _append_event_impl(self, session: Session, event: Event) -> None:
-        """Implementation of event appending."""
+        """Implementation of event appending.
+        
+        Args:
+            session: The session to append the event to.
+            event: The event to append.
+            
+        Raises:
+            RuntimeError: If appending the event fails.
+            ValueError: If the session file is not found.
+        """
         file_path = self._get_session_file_path(session.app_name, session.user_id, session.id)
         
         # Check if file exists

@@ -53,7 +53,12 @@ class SQLMemoryModel(Base):
 
 
 class SQLMemoryService(BaseCustomMemoryService):
-    """SQL-based memory service implementation."""
+    """SQL-based memory service implementation.
+
+    This service stores memory entries in a SQL database using SQLAlchemy.
+    It supports efficient searching of memory entries by extracting and indexing
+    text content from conversation events.
+    """
 
     def __init__(self, database_url: str):
         """Initialize the SQL memory service.
@@ -67,7 +72,11 @@ class SQLMemoryService(BaseCustomMemoryService):
         self.session_local: Optional[object] = None
 
     async def _initialize_impl(self) -> None:
-        """Initialize the database connection and create tables."""
+        """Initialize the database connection and create tables.
+        
+        Raises:
+            RuntimeError: If database initialization fails.
+        """
         try:
             self.engine = create_engine(self.database_url)
             Base.metadata.create_all(self.engine)
@@ -87,20 +96,47 @@ class SQLMemoryService(BaseCustomMemoryService):
         self.session_local = None
 
     def _get_db_session(self):
-        """Get a database session."""
+        """Get a database session.
+        
+        Returns:
+            A database session object.
+            
+        Raises:
+            RuntimeError: If the service is not initialized.
+        """
         if not self.session_local:
             raise RuntimeError("Service not initialized")
         return self.session_local()
 
     def _serialize_content(self, content: types.Content) -> str:
-        """Serialize Content object to JSON string."""
+        """Serialize Content object to JSON string.
+        
+        Args:
+            content: The Content object to serialize.
+            
+        Returns:
+            JSON string representation of the content.
+            
+        Raises:
+            ValueError: If serialization fails.
+        """
         try:
             return json.dumps(content.to_json_dict())
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to serialize content: {e}")
 
     def _deserialize_content(self, content_str: str) -> types.Content:
-        """Deserialize Content object from JSON string."""
+        """Deserialize Content object from JSON string.
+        
+        Args:
+            content_str: JSON string representation of the content.
+            
+        Returns:
+            The deserialized Content object.
+            
+        Raises:
+            ValueError: If deserialization fails.
+        """
         try:
             content_dict = json.loads(content_str) if content_str else {}
             return types.Content(**content_dict)
@@ -108,7 +144,14 @@ class SQLMemoryService(BaseCustomMemoryService):
             raise ValueError(f"Failed to deserialize content: {e}")
 
     def _extract_text_from_content(self, content: types.Content) -> str:
-        """Extract text content from a Content object for storage and search."""
+        """Extract text content from a Content object for storage and search.
+        
+        Args:
+            content: The Content object to extract text from.
+            
+        Returns:
+            Extracted text content.
+        """
         if not content or not content.parts:
             return ""
         
@@ -120,14 +163,28 @@ class SQLMemoryService(BaseCustomMemoryService):
         return " ".join(text_parts)
 
     def _extract_search_terms(self, text: str) -> str:
-        """Extract search terms from text content."""
+        """Extract search terms from text content.
+        
+        Args:
+            text: The text to extract search terms from.
+            
+        Returns:
+            Space-separated unique search terms.
+        """
         # Extract words from text and convert to lowercase
         words = re.findall(r'[A-Za-z]+', text.lower())
         # Return space-separated unique words
         return " ".join(sorted(set(words)))
 
     async def _add_session_to_memory_impl(self, session: "Session") -> None:
-        """Implementation of adding a session to memory."""
+        """Implementation of adding a session to memory.
+        
+        Args:
+            session: The session to add to memory.
+            
+        Raises:
+            RuntimeError: If adding the session to memory fails.
+        """
         db_session = self._get_db_session()
         try:
             # Add each event in the session as a separate memory entry
@@ -163,7 +220,19 @@ class SQLMemoryService(BaseCustomMemoryService):
     async def _search_memory_impl(
         self, *, app_name: str, user_id: str, query: str
     ) -> "SearchMemoryResponse":
-        """Implementation of searching memory."""
+        """Implementation of searching memory.
+        
+        Args:
+            app_name: The name of the application.
+            user_id: The id of the user.
+            query: The query to search for.
+            
+        Returns:
+            A SearchMemoryResponse containing the matching memories.
+            
+        Raises:
+            RuntimeError: If searching memory fails.
+        """
         from google.adk.memory.base_memory_service import SearchMemoryResponse
         from google.adk.memory.memory_entry import MemoryEntry
         
