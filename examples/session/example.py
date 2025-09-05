@@ -23,7 +23,7 @@ from google.adk.agents.simple_agent import SimpleAgent
 from google.adk.runners.simple_runner import SimpleRunner
 
 # Import our custom session services
-from custom_adk_services.sessions import (
+from google_adk_extras.sessions import (
     SQLSessionService,
     MongoSessionService,
     RedisSessionService,

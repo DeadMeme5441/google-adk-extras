@@ -10,9 +10,9 @@ from unittest.mock import patch, MagicMock
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
-from custom_adk_services.sessions.base_custom_session_service import BaseCustomSessionService
-from custom_adk_services.sessions.sql_session_service import SQLSessionService
-from custom_adk_services.sessions.yaml_file_session_service import YamlFileSessionService
+from google_adk_extras.sessions.base_custom_session_service import BaseCustomSessionService
+from google_adk_extras.sessions.sql_session_service import SQLSessionService
+from google_adk_extras.sessions.yaml_file_session_service import YamlFileSessionService
 
 
 class TestBaseCustomSessionService:

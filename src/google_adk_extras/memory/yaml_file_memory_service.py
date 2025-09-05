@@ -1,70 +1,66 @@
-"""Redis-based memory service implementation using redis-py."""
+"""YAML file-based memory service implementation."""
 
+import os
 import json
 import logging
 from typing import Optional, List
+from pathlib import Path
 import re
 from datetime import datetime
 
-try:
-    import redis
-    from redis.exceptions import RedisError
-except ImportError:
-    raise ImportError(
-        "Redis-py is required for RedisMemoryService. "
-        "Install it with: pip install redis"
-    )
+import yaml
 
 from google.genai import types
 from .base_custom_memory_service import BaseCustomMemoryService
 
 
-logger = logging.getLogger('custom_adk_services.' + __name__)
+logger = logging.getLogger('google_adk_extras.' + __name__)
 
 
-class RedisMemoryService(BaseCustomMemoryService):
-    """Redis-based memory service implementation."""
+class YamlFileMemoryService(BaseCustomMemoryService):
+    """YAML file-based memory service implementation."""
 
-    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
-        """Initialize the Redis memory service.
+    def __init__(self, base_directory: str = "./memory"):
+        """Initialize the YAML file memory service.
         
         Args:
-            host: Redis server host
-            port: Redis server port
-            db: Redis database number
+            base_directory: Base directory for storing memory files
         """
         super().__init__()
-        self.host = host
-        self.port = port
-        self.db = db
-        self.client: Optional[redis.Redis] = None
+        self.base_directory = Path(base_directory)
+        # Create base directory if it doesn't exist
+        self.base_directory.mkdir(parents=True, exist_ok=True)
 
     async def _initialize_impl(self) -> None:
-        """Initialize the Redis connection."""
-        try:
-            self.client = redis.Redis(host=self.host, port=self.port, db=self.db)
-            # Test connection
-            self.client.ping()
-        except RedisError as e:
-            raise RuntimeError(f"Failed to initialize Redis memory service: {e}")
+        """Initialize the file system memory service."""
+        # Ensure base directory exists
+        self.base_directory.mkdir(parents=True, exist_ok=True)
 
     async def _cleanup_impl(self) -> None:
-        """Clean up Redis connections."""
-        if self.client:
-            self.client.close()
-            self.client = None
+        """Clean up resources (no cleanup needed for file-based service)."""
+        pass
 
-    def _serialize_content(self, content: types.Content) -> str:
-        """Serialize Content object to JSON string."""
+    def _get_memory_directory(self, app_name: str, user_id: str) -> Path:
+        """Generate directory path for memory entries."""
+        directory = self.base_directory / app_name / user_id
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _get_memory_file_path(self, app_name: str, user_id: str, memory_id: str) -> Path:
+        """Generate file path for a memory entry."""
+        directory = self._get_memory_directory(app_name, user_id)
+        return directory / f"{memory_id}.yaml"
+
+    def _serialize_content(self, content: types.Content) -> dict:
+        """Serialize Content object to dictionary."""
         try:
-            return json.dumps(content.to_json_dict())
+            return content.to_json_dict()
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to serialize content: {e}")
 
-    def _deserialize_content(self, content_str: str) -> types.Content:
-        """Deserialize Content object from JSON string."""
+    def _deserialize_content(self, content_dict: dict) -> types.Content:
+        """Deserialize Content object from dictionary."""
         try:
-            content_dict = json.loads(content_str) if content_str else {}
             return types.Content(**content_dict)
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to deserialize content: {e}")
@@ -88,18 +84,9 @@ class RedisMemoryService(BaseCustomMemoryService):
         # Return unique words as a list
         return sorted(set(words))
 
-    def _get_user_key(self, app_name: str, user_id: str) -> str:
-        """Generate Redis key for user's memory entries."""
-        return f"memory:{app_name}:{user_id}"
-
     async def _add_session_to_memory_impl(self, session: "Session") -> None:
         """Implementation of adding a session to memory."""
-        if not self.client:
-            raise RuntimeError("Service not initialized")
-        
         try:
-            user_key = self._get_user_key(session.app_name, session.user_id)
-            
             # Add each event in the session as a separate memory entry
             for event in session.events:
                 if not event.content or not event.content.parts:
@@ -109,9 +96,14 @@ class RedisMemoryService(BaseCustomMemoryService):
                 text_content = self._extract_text_from_content(event.content)
                 search_terms = self._extract_search_terms(text_content)
                 
+                # Generate memory ID
+                memory_id = f"{session.id}_{event.timestamp}"
+                
                 # Create memory entry
                 memory_entry = {
-                    "id": f"{session.id}:{event.timestamp}",
+                    "id": memory_id,
+                    "app_name": session.app_name,
+                    "user_id": session.user_id,
                     "content": self._serialize_content(event.content),
                     "author": event.author,
                     "timestamp": event.timestamp,
@@ -119,14 +111,13 @@ class RedisMemoryService(BaseCustomMemoryService):
                     "search_terms": search_terms
                 }
                 
-                # Store in Redis with a score based on timestamp for ordering
-                score = event.timestamp if event.timestamp else 0
-                self.client.zadd(user_key, {json.dumps(memory_entry): score})
+                # Save to YAML file
+                file_path = self._get_memory_file_path(session.app_name, session.user_id, memory_id)
+                with open(file_path, 'w') as f:
+                    yaml.dump(memory_entry, f, default_flow_style=False, allow_unicode=True)
                 
-        except RedisError as e:
+        except Exception as e:
             raise RuntimeError(f"Failed to add session to memory: {e}")
-        except (TypeError, ValueError) as e:
-            raise RuntimeError(f"Failed to serialize memory entry: {e}")
 
     async def _search_memory_impl(
         self, *, app_name: str, user_id: str, query: str
@@ -135,12 +126,7 @@ class RedisMemoryService(BaseCustomMemoryService):
         from google.adk.memory.base_memory_service import SearchMemoryResponse
         from google.adk.memory.memory_entry import MemoryEntry
         
-        if not self.client:
-            raise RuntimeError("Service not initialized")
-        
         try:
-            user_key = self._get_user_key(app_name, user_id)
-            
             # Extract search terms from query
             query_terms = self._extract_search_terms(query)
             
@@ -148,21 +134,25 @@ class RedisMemoryService(BaseCustomMemoryService):
                 # If no searchable terms in query, return empty response
                 return SearchMemoryResponse(memories=[])
             
-            # Get all memory entries for the user
-            memory_entries = self.client.zrange(user_key, 0, -1, withscores=True)
+            # Get memory directory for this user
+            memory_directory = self._get_memory_directory(app_name, user_id)
+            
+            # Find all memory files for this user
+            memory_files = list(memory_directory.glob("*.yaml"))
             
             # Filter entries that match any of the query terms
             matching_memories = []
-            for entry_data, _ in memory_entries:
+            for file_path in memory_files:
                 try:
-                    entry = json.loads(entry_data)
+                    with open(file_path, 'r') as f:
+                        entry = yaml.safe_load(f)
                     
                     # Check if any query term matches the search terms in this entry
                     entry_search_terms = entry.get("search_terms", [])
                     if any(term in entry_search_terms for term in query_terms):
                         matching_memories.append(entry)
-                except (TypeError, ValueError):
-                    # Skip invalid entries
+                except (yaml.YAMLError, IOError):
+                    # Skip invalid files
                     continue
             
             # Convert to MemoryEntry objects
@@ -182,7 +172,5 @@ class RedisMemoryService(BaseCustomMemoryService):
                 memories.append(memory_entry)
             
             return SearchMemoryResponse(memories=memories)
-        except RedisError as e:
+        except Exception as e:
             raise RuntimeError(f"Failed to search memory: {e}")
-        except (TypeError, ValueError) as e:
-            raise RuntimeError(f"Failed to deserialize memory entry: {e}")

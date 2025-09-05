@@ -13,7 +13,7 @@ from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 # Import our custom session service
-from custom_adk_services.sessions import MongoSessionService
+from google_adk_extras.sessions import MongoSessionService
 
 
 async def main():

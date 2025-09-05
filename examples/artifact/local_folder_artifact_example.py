@@ -12,7 +12,7 @@ from pathlib import Path
 from google.genai import types
 
 # Import our custom artifact service
-from custom_adk_services.artifacts import LocalFolderArtifactService
+from google_adk_extras.artifacts import LocalFolderArtifactService
 
 
 async def main():

@@ -19,7 +19,7 @@ from google.adk.events.event import Event
 from .base_custom_session_service import BaseCustomSessionService
 
 
-logger = logging.getLogger('custom_adk_services.' + __name__)
+logger = logging.getLogger('google_adk_extras.' + __name__)
 
 # Use the modern declarative_base import
 Base = declarative_base()

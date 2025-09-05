@@ -10,7 +10,7 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from google.genai import types
-from custom_adk_services.artifacts import (
+from google_adk_extras.artifacts import (
     SQLArtifactService,
     LocalFolderArtifactService
 )

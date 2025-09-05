@@ -19,7 +19,7 @@ from pathlib import Path
 from google.genai import types
 
 # Import our custom artifact services
-from custom_adk_services.artifacts import (
+from google_adk_extras.artifacts import (
     SQLArtifactService,
     MongoArtifactService,
     LocalFolderArtifactService,

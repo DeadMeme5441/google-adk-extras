@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from google.genai import types
 
 # Import our custom artifact service
-from custom_adk_services.artifacts import SQLArtifactService
+from google_adk_extras.artifacts import SQLArtifactService
 
 
 async def main():

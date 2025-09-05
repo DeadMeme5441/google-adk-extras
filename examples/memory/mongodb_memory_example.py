@@ -15,7 +15,7 @@ from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 # Import our custom memory service
-from custom_adk_services.memory import MongoMemoryService
+from google_adk_extras.memory import MongoMemoryService
 
 
 async def main():

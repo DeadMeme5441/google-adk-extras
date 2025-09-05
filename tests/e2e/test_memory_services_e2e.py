@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta
 
 from google.genai import types
-from custom_adk_services.memory import (
+from google_adk_extras.memory import (
     SQLMemoryService,
     YamlFileMemoryService,
 )

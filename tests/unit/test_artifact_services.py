@@ -9,9 +9,9 @@ from unittest.mock import patch, MagicMock
 
 from google.genai.types import Blob, Part
 
-from custom_adk_services.artifacts.base_custom_artifact_service import BaseCustomArtifactService
-from custom_adk_services.artifacts.sql_artifact_service import SQLArtifactService
-from custom_adk_services.artifacts.local_folder_artifact_service import LocalFolderArtifactService
+from google_adk_extras.artifacts.base_custom_artifact_service import BaseCustomArtifactService
+from google_adk_extras.artifacts.sql_artifact_service import SQLArtifactService
+from google_adk_extras.artifacts.local_folder_artifact_service import LocalFolderArtifactService
 
 
 class TestBaseCustomArtifactService:

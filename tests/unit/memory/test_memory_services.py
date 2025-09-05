@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 from google.genai import types
-from custom_adk_services.memory import (
+from google_adk_extras.memory import (
     SQLMemoryService,
     MongoMemoryService,
     RedisMemoryService,
@@ -101,7 +101,7 @@ class TestMongoMemoryService:
         """Test MongoDB memory service initialization."""
         # Patch the MongoClient to avoid actual connection
         from unittest.mock import patch
-        with patch('custom_adk_services.memory.mongo_memory_service.MongoClient') as mock_mongo_client:
+        with patch('google_adk_extras.memory.mongo_memory_service.MongoClient') as mock_mongo_client:
             # Mock the MongoDB client and database
             mock_client = Mock()
             mock_db = Mock()

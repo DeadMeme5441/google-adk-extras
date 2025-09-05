@@ -11,7 +11,7 @@ import asyncio
 from google.genai import types
 
 # Import our custom artifact service
-from custom_adk_services.artifacts import S3ArtifactService
+from google_adk_extras.artifacts import S3ArtifactService
 
 
 async def main():

@@ -25,7 +25,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/DeadMeme5441/google-adk-extras",
-    packages=find_packages(where="src", include=["custom_adk_services", "custom_adk_services.*"]),
+    packages=find_packages(where="src", include=["google_adk_extras", "google_adk_extras.*"]),
     package_dir={"": "src"},
     classifiers=[
         "Development Status :: 4 - Beta",

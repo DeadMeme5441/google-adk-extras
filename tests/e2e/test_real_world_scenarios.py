@@ -15,11 +15,11 @@ from google.adk.events.event import Event
 from google.adk.runners import InMemoryRunner
 from google.genai.types import Blob, Part, Content
 
-from custom_adk_services.sessions import (
+from google_adk_extras.sessions import (
     SQLSessionService,
     YamlFileSessionService
 )
-from custom_adk_services.artifacts import (
+from google_adk_extras.artifacts import (
     SQLArtifactService,
     LocalFolderArtifactService
 )

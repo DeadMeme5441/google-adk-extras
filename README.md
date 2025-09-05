@@ -38,7 +38,7 @@ pip install google-adk-extras
 ### Session Services
 
 ```python
-from custom_adk_services.sessions import SQLSessionService
+from google_adk_extras.sessions import SQLSessionService
 
 # Initialize SQL session service
 session_service = SQLSessionService("sqlite:///sessions.db")
@@ -55,7 +55,7 @@ session = await session_service.create_session(
 ### Artifact Services
 
 ```python
-from custom_adk_services.artifacts import LocalFolderArtifactService
+from google_adk_extras.artifacts import LocalFolderArtifactService
 from google.genai import types
 
 # Initialize local folder artifact service
@@ -77,7 +77,7 @@ version = await artifact_service.save_artifact(
 ### Memory Services
 
 ```python
-from custom_adk_services.memory import RedisMemoryService
+from google_adk_extras.memory import RedisMemoryService
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 

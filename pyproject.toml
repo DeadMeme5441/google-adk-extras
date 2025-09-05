@@ -11,6 +11,9 @@ dependencies = [
     "redis>=4.0.0",
     "pyyaml>=6.0.0",
     "typing-extensions>=4.0.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.1.0",
+    "google-adk>=1.13.0",
 ]
 
 [project.optional-dependencies]
@@ -19,3 +22,10 @@ dev = [
     "pytest-asyncio>=0.15.0",
     "google-genai>=1.0.0",
 ]
+s3 = [
+    "boto3>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"

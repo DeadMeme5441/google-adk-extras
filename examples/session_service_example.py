@@ -5,7 +5,7 @@ from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 # Import custom session services
-from custom_adk_services.sessions import (
+from google_adk_extras.sessions import (
     SQLSessionService,
     MongoSessionService,
     RedisSessionService,

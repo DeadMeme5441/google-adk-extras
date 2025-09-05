@@ -12,7 +12,7 @@ from google.adk.runners import InMemoryRunner
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
-from custom_adk_services.sessions.yaml_file_session_service import YamlFileSessionService
+from google_adk_extras.sessions.yaml_file_session_service import YamlFileSessionService
 
 
 async def example_with_custom_session_service():

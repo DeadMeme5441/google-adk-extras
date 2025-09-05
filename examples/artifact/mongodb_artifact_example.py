@@ -11,7 +11,7 @@ import asyncio
 from google.genai import types
 
 # Import our custom artifact service
-from custom_adk_services.artifacts import MongoArtifactService
+from google_adk_extras.artifacts import MongoArtifactService
 
 
 async def main():

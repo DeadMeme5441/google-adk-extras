@@ -1,55 +1,64 @@
-"""YAML file-based memory service implementation."""
+"""MongoDB-based memory service implementation using PyMongo."""
 
-import os
 import json
 import logging
 from typing import Optional, List
-from pathlib import Path
 import re
 from datetime import datetime
 
-import yaml
+try:
+    from pymongo import MongoClient
+    from pymongo.errors import PyMongoError
+    from bson import ObjectId
+except ImportError:
+    raise ImportError(
+        "PyMongo is required for MongoMemoryService. "
+        "Install it with: pip install pymongo"
+    )
 
 from google.genai import types
 from .base_custom_memory_service import BaseCustomMemoryService
 
 
-logger = logging.getLogger('custom_adk_services.' + __name__)
+logger = logging.getLogger('google_adk_extras.' + __name__)
 
 
-class YamlFileMemoryService(BaseCustomMemoryService):
-    """YAML file-based memory service implementation."""
+class MongoMemoryService(BaseCustomMemoryService):
+    """MongoDB-based memory service implementation."""
 
-    def __init__(self, base_directory: str = "./memory"):
-        """Initialize the YAML file memory service.
+    def __init__(self, connection_string: str, database_name: str = "adk_memory"):
+        """Initialize the MongoDB memory service.
         
         Args:
-            base_directory: Base directory for storing memory files
+            connection_string: MongoDB connection string
+            database_name: Name of the database to use
         """
         super().__init__()
-        self.base_directory = Path(base_directory)
-        # Create base directory if it doesn't exist
-        self.base_directory.mkdir(parents=True, exist_ok=True)
+        self.connection_string = connection_string
+        self.database_name = database_name
+        self.client: Optional[MongoClient] = None
+        self.db: Optional[object] = None
 
     async def _initialize_impl(self) -> None:
-        """Initialize the file system memory service."""
-        # Ensure base directory exists
-        self.base_directory.mkdir(parents=True, exist_ok=True)
+        """Initialize the MongoDB connection."""
+        try:
+            self.client = MongoClient(self.connection_string)
+            self.db = self.client[self.database_name]
+            
+            # Create indexes for efficient querying
+            memory_collection = self.db["memory_entries"]
+            memory_collection.create_index([("app_name", 1), ("user_id", 1)])
+            memory_collection.create_index([("search_terms", 1)])
+            memory_collection.create_index([("app_name", 1), ("user_id", 1), ("search_terms", 1)])
+        except PyMongoError as e:
+            raise RuntimeError(f"Failed to initialize MongoDB memory service: {e}")
 
     async def _cleanup_impl(self) -> None:
-        """Clean up resources (no cleanup needed for file-based service)."""
-        pass
-
-    def _get_memory_directory(self, app_name: str, user_id: str) -> Path:
-        """Generate directory path for memory entries."""
-        directory = self.base_directory / app_name / user_id
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory
-
-    def _get_memory_file_path(self, app_name: str, user_id: str, memory_id: str) -> Path:
-        """Generate file path for a memory entry."""
-        directory = self._get_memory_directory(app_name, user_id)
-        return directory / f"{memory_id}.yaml"
+        """Clean up MongoDB connections."""
+        if self.client:
+            self.client.close()
+            self.client = None
+        self.db = None
 
     def _serialize_content(self, content: types.Content) -> dict:
         """Serialize Content object to dictionary."""
@@ -86,7 +95,12 @@ class YamlFileMemoryService(BaseCustomMemoryService):
 
     async def _add_session_to_memory_impl(self, session: "Session") -> None:
         """Implementation of adding a session to memory."""
+        if not self.db:
+            raise RuntimeError("Service not initialized")
+        
         try:
+            memory_collection = self.db["memory_entries"]
+            
             # Add each event in the session as a separate memory entry
             for event in session.events:
                 if not event.content or not event.content.parts:
@@ -96,27 +110,21 @@ class YamlFileMemoryService(BaseCustomMemoryService):
                 text_content = self._extract_text_from_content(event.content)
                 search_terms = self._extract_search_terms(text_content)
                 
-                # Generate memory ID
-                memory_id = f"{session.id}_{event.timestamp}"
-                
-                # Create memory entry
-                memory_entry = {
-                    "id": memory_id,
+                # Create memory document
+                memory_document = {
                     "app_name": session.app_name,
                     "user_id": session.user_id,
                     "content": self._serialize_content(event.content),
                     "author": event.author,
-                    "timestamp": event.timestamp,
+                    "timestamp": datetime.fromtimestamp(event.timestamp) if event.timestamp else None,
                     "text_content": text_content,
                     "search_terms": search_terms
                 }
                 
-                # Save to YAML file
-                file_path = self._get_memory_file_path(session.app_name, session.user_id, memory_id)
-                with open(file_path, 'w') as f:
-                    yaml.dump(memory_entry, f, default_flow_style=False, allow_unicode=True)
+                # Save to MongoDB
+                memory_collection.insert_one(memory_document)
                 
-        except Exception as e:
+        except PyMongoError as e:
             raise RuntimeError(f"Failed to add session to memory: {e}")
 
     async def _search_memory_impl(
@@ -126,7 +134,12 @@ class YamlFileMemoryService(BaseCustomMemoryService):
         from google.adk.memory.base_memory_service import SearchMemoryResponse
         from google.adk.memory.memory_entry import MemoryEntry
         
+        if not self.db:
+            raise RuntimeError("Service not initialized")
+        
         try:
+            memory_collection = self.db["memory_entries"]
+            
             # Extract search terms from query
             query_terms = self._extract_search_terms(query)
             
@@ -134,43 +147,28 @@ class YamlFileMemoryService(BaseCustomMemoryService):
                 # If no searchable terms in query, return empty response
                 return SearchMemoryResponse(memories=[])
             
-            # Get memory directory for this user
-            memory_directory = self._get_memory_directory(app_name, user_id)
+            # Build query - find entries that match any of the query words
+            # Using MongoDB's $in operator to match any of the search terms
+            mongo_query = {
+                "app_name": app_name,
+                "user_id": user_id,
+                "search_terms": {"$in": query_terms}
+            }
             
-            # Find all memory files for this user
-            memory_files = list(memory_directory.glob("*.yaml"))
-            
-            # Filter entries that match any of the query terms
-            matching_memories = []
-            for file_path in memory_files:
-                try:
-                    with open(file_path, 'r') as f:
-                        entry = yaml.safe_load(f)
-                    
-                    # Check if any query term matches the search terms in this entry
-                    entry_search_terms = entry.get("search_terms", [])
-                    if any(term in entry_search_terms for term in query_terms):
-                        matching_memories.append(entry)
-                except (yaml.YAMLError, IOError):
-                    # Skip invalid files
-                    continue
+            # Execute query
+            cursor = memory_collection.find(mongo_query)
             
             # Convert to MemoryEntry objects
             memories = []
-            for entry in matching_memories:
-                content = self._deserialize_content(entry["content"])
-                # Format timestamp as ISO string
-                timestamp_str = None
-                if entry.get("timestamp"):
-                    timestamp_str = datetime.fromtimestamp(entry["timestamp"]).isoformat()
-                
+            for doc in cursor:
+                content = self._deserialize_content(doc["content"])
                 memory_entry = MemoryEntry(
                     content=content,
-                    author=entry.get("author"),
-                    timestamp=timestamp_str
+                    author=doc.get("author"),
+                    timestamp=doc["timestamp"].isoformat() if doc.get("timestamp") else None
                 )
                 memories.append(memory_entry)
             
             return SearchMemoryResponse(memories=memories)
-        except Exception as e:
+        except PyMongoError as e:
             raise RuntimeError(f"Failed to search memory: {e}")

@@ -21,7 +21,7 @@ from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 # Import our custom memory services
-from custom_adk_services.memory import (
+from google_adk_extras.memory import (
     SQLMemoryService,
     MongoMemoryService,
     RedisMemoryService,

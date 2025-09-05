@@ -8,7 +8,7 @@ import os
 # Add src to path so we can import our modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from custom_adk_services.sessions.yaml_file_session_service import YamlFileSessionService
+from google_adk_extras.sessions.yaml_file_session_service import YamlFileSessionService
 
 
 async def test_yaml_session_service():

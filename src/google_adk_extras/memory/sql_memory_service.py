@@ -20,7 +20,7 @@ from google.genai import types
 from .base_custom_memory_service import BaseCustomMemoryService
 
 
-logger = logging.getLogger('custom_adk_services.' + __name__)
+logger = logging.getLogger('google_adk_extras.' + __name__)
 
 # Use the modern declarative_base import
 Base = declarative_base()

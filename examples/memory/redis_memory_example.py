@@ -15,7 +15,7 @@ from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 # Import our custom memory service
-from custom_adk_services.memory import RedisMemoryService
+from google_adk_extras.memory import RedisMemoryService
 
 
 async def main():

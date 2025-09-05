@@ -10,7 +10,7 @@ import shutil
 # Add src to path so we can import our modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from custom_adk_services.sessions import (
+from google_adk_extras.sessions import (
     SQLSessionService,
     MongoSessionService,
     RedisSessionService,
