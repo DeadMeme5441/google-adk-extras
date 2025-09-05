@@ -1,20 +1,21 @@
 # Google ADK Custom Services Implementation - Development Process
 
-This document serves as a guideline for how an agent should approach implementing custom services for Google ADK, based on the development cycle we followed for session services.
+This document serves as a guideline for how an agent should approach implementing custom services for Google ADK, based on the development cycle we followed for session services and artifact services.
 
 ## Understanding Google ADK Services
 
 ### 1. Research Phase
-- **Study the Base Interface**: Examine the base service class (e.g., `BaseSessionService`) to understand required methods
+- **Study the Base Interface**: Examine the base service class (e.g., `BaseSessionService`, `BaseArtifactService`) to understand required methods
 - **Analyze Existing Implementations**: Review existing implementations like `InMemorySessionService` to understand patterns
-- **Understand Data Models**: Study the core data structures (Session, Event, etc.) and their relationships
+- **Understand Data Models**: Study the core data structures (Session, Event, Part, Blob, etc.) and their relationships
 - **Identify Dependencies**: Note required external libraries and their usage patterns
 
 ### 2. Design Phase
-- **Define Storage Strategy**: Choose appropriate storage backend (SQL, NoSQL, file-based, etc.)
+- **Define Storage Strategy**: Choose appropriate storage backend (SQL, NoSQL, file-based, cloud, etc.)
 - **Plan Data Serialization**: Determine how to store complex objects in the chosen backend
 - **Design Error Handling**: Plan for failure scenarios and recovery mechanisms
 - **Consider Performance**: Think about indexing, caching, and query optimization
+- **Versioning Support**: Plan how to handle versioning for artifacts/services that require it
 
 ## Implementation Process
 
@@ -28,12 +29,14 @@ This document serves as a guideline for how an agent should approach implementin
 - **Implement Required Methods**: Override all abstract methods from the base interface
 - **Add Initialization/Cleanup**: Implement proper resource management
 - **Handle Asynchronous Operations**: Ensure all methods follow async patterns
+- **Versioning Support**: Implement versioning where required
 
 ### 3. Storage-Specific Implementation
 - **Create Data Models**: Define how data will be stored in the backend
 - **Implement CRUD Operations**: Create, Read, Update, Delete functionality
 - **Handle Serialization**: Convert between Google ADK objects and storage format
 - **Manage Connections**: Handle database/file connections and lifecycle
+- **Versioning Implementation**: Handle multiple versions of artifacts/data
 
 ## Testing Strategy
 
@@ -42,11 +45,13 @@ This document serves as a guideline for how an agent should approach implementin
 - **Edge Case Testing**: Handle empty states, errors, invalid inputs
 - **Data Integrity Checks**: Ensure data is stored and retrieved correctly
 - **Performance Testing**: Verify operations complete within acceptable timeframes
+- **Versioning Testing**: Test version creation, retrieval, and listing
 
 ### 2. Integration Testing
-- **Test with Google ADK Objects**: Verify compatibility with Session, Event, etc.
-- **End-to-End Workflows**: Test complete session lifecycle (create, use, delete)
+- **Test with Google ADK Objects**: Verify compatibility with Session, Event, Part, Blob, etc.
+- **End-to-End Workflows**: Test complete service lifecycle (create, use, delete)
 - **Error Recovery**: Test how the service handles failures gracefully
+- **Versioning Workflows**: Test complete versioning workflows
 
 ### 3. Cross-Service Testing
 - **Multi-Backend Consistency**: Ensure all implementations behave consistently
@@ -99,9 +104,9 @@ This document serves as a guideline for how an agent should approach implementin
 
 ### Artifact Service Implementation Steps
 1. **Research**: Examine `BaseArtifactService` interface and file handling patterns
-2. **Design**: Plan file storage strategy (local, cloud, hybrid)
+2. **Design**: Plan file storage strategy with versioning support
 3. **Implement**: Create artifact service with upload/download functionality
-4. **Test**: Verify file operations maintain data integrity
+4. **Test**: Verify file operations maintain data integrity and versioning
 5. **Document**: Provide examples for file management workflows
 
 ### Credential Service Implementation Steps
@@ -149,11 +154,15 @@ This document serves as a guideline for how an agent should approach implementin
 - **PyMongo**: MongoDB driver for document storage
 - **Redis-py**: Redis client for in-memory storage
 - **PyYAML**: YAML parsing and serialization for file storage
+- **Boto3**: AWS SDK for S3-compatible storage
 
 ### Google ADK Components
 - **BaseSessionService**: Core interface for session management
+- **BaseArtifactService**: Core interface for artifact management
 - **Session Model**: Data structure for storing conversation state
 - **Event Model**: Data structure for individual conversation events
+- **Part Model**: Data structure for artifact content
+- **Blob Model**: Data structure for binary content
 - **Runner Classes**: Integration points for using custom services
 
 ## Lessons Learned
@@ -163,11 +172,18 @@ This document serves as a guideline for how an agent should approach implementin
 - **Serialization Complexity**: Handling complex object graphs in different storage systems
 - **Error Propagation**: Properly handling and reporting errors through the stack
 - **Resource Management**: Ensuring proper cleanup of connections and file handles
+- **Versioning Implementation**: Managing multiple versions of artifacts/data
 
 ### Development Process
 - **Incremental Implementation**: Building one service at a time for better focus
 - **Comprehensive Testing**: Catching issues early with thorough test coverage
 - **Documentation First**: Writing documentation helps clarify implementation details
 - **Cross-Platform Compatibility**: Ensuring services work across different environments
+
+### Artifact Services Specific Insights
+- **Binary Data Handling**: Efficiently storing and retrieving binary data
+- **Versioning Strategies**: Different approaches to managing artifact versions
+- **Metadata Management**: Storing and retrieving artifact metadata
+- **Cloud Integration**: Connecting to S3-compatible storage services
 
 This development cycle provides a repeatable process for implementing custom services in Google ADK, ensuring quality, consistency, and maintainability across all implementations.
