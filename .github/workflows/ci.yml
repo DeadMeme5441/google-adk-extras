@@ -27,7 +27,8 @@ jobs:
 
     - name: Install dependencies including dev dependencies
       run: |
-        uv sync --dev
+        uv sync
+        uv pip install pytest pytest-asyncio
 
     - name: Run tests
       run: |
@@ -49,7 +50,8 @@ jobs:
 
     - name: Install dependencies including dev dependencies
       run: |
-        uv sync --dev
+        uv sync
+        uv pip install pytest pytest-asyncio
 
     - name: Run linting
       run: |
