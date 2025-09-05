@@ -1,5 +1,5 @@
 [project]
-name = "custom-adk-services"
+name = "google-adk-extras"
 version = "0.1.0"
 description = "Custom implementations of Google ADK services (Session, Artifact, Memory) with multiple storage backends"
 readme = "README.md"

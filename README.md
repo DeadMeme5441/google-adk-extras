@@ -1,7 +1,7 @@
 # Google ADK Custom Services
 
 [![CI](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/ci.yml/badge.svg)](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/ci.yml)
-[![PyPI version](https://badge.fury.io/py/custom-adk-services.svg)](https://badge.fury.io/py/custom-adk-services)
+[![PyPI version](https://badge.fury.io/py/google-adk-extras.svg)](https://badge.fury.io/py/google-adk-extras)
 
 Custom implementations of Google ADK services (Session, Artifact, Memory) with multiple storage backends.
 
@@ -30,7 +30,7 @@ This package provides custom implementations for Google ADK services with variou
 ## Installation
 
 ```bash
-pip install custom-adk-services
+pip install google-adk-extras
 ```
 
 ## Usage

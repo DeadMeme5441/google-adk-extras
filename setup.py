@@ -17,7 +17,7 @@ with open(os.path.join(this_directory, 'pyproject.toml'), encoding='utf-8') as f
     description = description_match.group(1) if description_match else 'Custom implementations of Google ADK services'
 
 setup(
-    name="custom-adk-services",
+    name="google-adk-extras",
     version=version,
     author="Your Name",
     author_email="your.email@example.com",
