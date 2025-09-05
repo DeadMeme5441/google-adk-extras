@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for custom-adk-services
+# Multi-stage Dockerfile for google-adk-extras
 
 # Build stage
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm AS builder
@@ -50,4 +50,4 @@ USER 1001
 EXPOSE 8000
 
 # Default command
-CMD ["python", "-c", "print('Custom ADK Services container is running')"]
+CMD ["python", "-c", "print('Google ADK Extras container is running')"]

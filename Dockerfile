@@ -1,4 +1,4 @@
-# Dockerfile for custom-adk-services
+# Dockerfile for google-adk-extras
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Set working directory
@@ -15,4 +15,4 @@ RUN uv sync --locked --no-cache
 EXPOSE 8000 6379 27017 5432
 
 # Default command
-CMD ["uv", "run", "python", "-c", "print('Custom ADK Services container is running. Use uv run to execute your application.')"]
+CMD ["uv", "run", "python", "-c", "print('Google ADK Extras container is running. Use uv run to execute your application.')"]
