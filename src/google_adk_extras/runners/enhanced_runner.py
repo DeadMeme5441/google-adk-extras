@@ -7,6 +7,7 @@ Runner with advanced features for YAML-driven agent systems.
 import asyncio
 import logging
 import time
+from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from google.adk.agents.base_agent import BaseAgent
@@ -297,6 +298,7 @@ class EnhancedRunner(Runner):
                 # Re-raise YAML system errors as-is
                 raise
     
+    @asynccontextmanager
     async def _execution_context(self, yaml_context: YamlSystemContext):
         """Async context manager for enhanced execution.
         
@@ -327,18 +329,22 @@ class EnhancedRunner(Runner):
     def _update_performance_metrics(self, execution_time: float, success: bool):
         """Update performance metrics.
         
+        Note: This method updates metrics for a completed execution.
+        total_invocations should be managed separately.
+        
         Args:
             execution_time: Execution time in seconds
             success: Whether execution was successful
         """
         metrics = self._performance_metrics
         
-        # Update average invocation time
+        # Update average invocation time using running average
         total_invocations = metrics['total_invocations']
         current_avg = metrics['avg_invocation_time']
-        metrics['avg_invocation_time'] = (
-            (current_avg * (total_invocations - 1) + execution_time) / total_invocations
-        )
+        current_total_time = current_avg * (total_invocations - 1) if total_invocations > 0 else 0.0
+        
+        new_total_time = current_total_time + execution_time
+        metrics['avg_invocation_time'] = new_total_time / max(1, total_invocations)
         
         # Update error count
         if not success:

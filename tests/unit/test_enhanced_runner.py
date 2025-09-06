@@ -342,10 +342,12 @@ class TestEnhancedRunnerPerformanceMetrics:
     
     def test_update_performance_metrics_failure(self, runner):
         """Test updating performance metrics for failed execution."""
-        # Simulate some invocations
-        runner._performance_metrics['total_invocations'] = 2
-        runner._update_performance_metrics(1.0, success=True)  # First success
-        runner._update_performance_metrics(3.0, success=False)  # Second failure
+        # Simulate incrementing invocations to 2
+        runner._performance_metrics['total_invocations'] = 1
+        runner._update_performance_metrics(1.0, success=True)  # First execution
+        
+        runner._performance_metrics['total_invocations'] = 2  # Second invocation
+        runner._update_performance_metrics(3.0, success=False)  # Second execution
         
         metrics = runner.get_performance_metrics()
         assert metrics['avg_invocation_time'] == 2.0  # (1.0 + 3.0) / 2
@@ -498,7 +500,8 @@ class TestEnhancedRunnerToolExecution:
             call_args = mock_execute.call_args
             assert call_args[0][0] is tool
             assert call_args[0][1] is context
-            assert call_args[1] is tool_config  # tool_config passed
+            # call_args[0][2] is tool_context (YamlSystemContext)
+            assert call_args[0][3] is tool_config  # tool_config passed as 4th argument
     
     @pytest.mark.asyncio
     async def test_execute_tool_enhanced_error_handling(self, runner):

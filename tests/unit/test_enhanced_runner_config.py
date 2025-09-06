@@ -246,12 +246,12 @@ class TestEnhancedRunConfig:
             'retry_policies': {
                 'default': {
                     'max_attempts': 5,
-                    'strategy': 'FIXED_DELAY',
+                    'strategy': 'fixed_delay',
                     'base_delay': 2.0
                 },
                 'custom': {
                     'max_attempts': 2,
-                    'strategy': 'IMMEDIATE'
+                    'strategy': 'immediate'
                 }
             }
         }
@@ -327,7 +327,8 @@ class TestEnhancedRunConfig:
         
         # Should return default for unknown type
         default_config = config.get_retry_config('unknown')
-        assert default_config is config.retry_policies['default']
+        assert isinstance(default_config, RetryConfig)
+        assert default_config.max_attempts == 3  # Default RetryConfig value
     
     def test_merge_with_yaml(self):
         """Test merging configuration with additional YAML."""

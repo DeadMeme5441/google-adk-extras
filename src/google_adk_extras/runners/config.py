@@ -374,7 +374,11 @@ class EnhancedRunConfig(BaseModel):
         Returns:
             RetryConfig: Retry configuration
         """
-        return self.retry_policies.get(operation_type, self.retry_policies['default'])
+        if operation_type in self.retry_policies:
+            return self.retry_policies[operation_type]
+        
+        # Fall back to 'default' if it exists, otherwise create a new default config
+        return self.retry_policies.get('default', RetryConfig())
     
     def merge_with_yaml(self, yaml_config: Dict[str, Any]) -> 'EnhancedRunConfig':
         """Merge this configuration with additional YAML configuration.

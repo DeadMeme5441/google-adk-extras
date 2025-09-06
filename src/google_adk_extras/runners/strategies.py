@@ -57,7 +57,7 @@ class CircuitBreaker:
         if self.state == CircuitBreakerState.OPEN:
             if self.last_failure_time is not None and time.time() - self.last_failure_time < self.config.recovery_timeout:
                 raise ToolExecutionError(
-                    "Circuit breaker is OPEN - rejecting request",
+                    "Circuit breaker is open",
                     context=kwargs.get('context', YamlSystemContext('unknown')),
                     error_code="CIRCUIT_BREAKER_OPEN"
                 )
@@ -67,9 +67,10 @@ class CircuitBreaker:
                 self.success_count = 0
         
         try:
-            # Execute with timeout
+            # Execute with timeout (exclude 'context' from kwargs as it's for error handling only)
+            func_kwargs = {k: v for k, v in kwargs.items() if k != 'context'}
             result = await asyncio.wait_for(
-                func(*args, **kwargs),
+                func(*args, **func_kwargs),
                 timeout=self.config.timeout
             )
             
@@ -441,6 +442,10 @@ class McpToolExecutionStrategy(DefaultToolExecutionStrategy):
         mcp_context = yaml_context.with_tool(getattr(tool, 'name', 'unknown_mcp_tool'))
         mcp_context = mcp_context.add_context('tool_type', 'mcp')
         
+        # Temporarily override timeout for MCP connection timeout
+        original_timeout = self.timeout
+        self.timeout = self.connection_timeout
+        
         try:
             return await super().execute_tool(tool, context, mcp_context, tool_config)
         except ToolExecutionError as e:
@@ -451,6 +456,9 @@ class McpToolExecutionStrategy(DefaultToolExecutionStrategy):
                 "Check MCP server logs for errors"
             ])
             raise
+        finally:
+            # Restore original timeout
+            self.timeout = original_timeout
     
     def get_tool_type(self) -> str:
         """Get tool type."""
@@ -482,6 +490,15 @@ class OpenApiToolExecutionStrategy(DefaultToolExecutionStrategy):
                 strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
                 base_delay=1.0,
                 max_delay=30.0
+            )
+        
+        # Default circuit breaker config for API calls
+        if circuit_breaker_config is None:
+            circuit_breaker_config = CircuitBreakerConfig(
+                failure_threshold=5,
+                recovery_timeout=60.0,
+                success_threshold=3,
+                timeout=30.0
             )
         
         super().__init__(timeout, retry_config, circuit_breaker_config)
@@ -619,7 +636,7 @@ class ToolExecutionStrategyManager:
         if self.default_strategy:
             return self.default_strategy
         
-        raise ValueError(f"No execution strategy found for tool type: {tool_type}")
+        raise ValueError(f"No strategy registered for tool type: {tool_type}")
     
     def detect_tool_type(self, tool: Any) -> str:
         """Detect tool type from tool object.
@@ -631,8 +648,15 @@ class ToolExecutionStrategyManager:
             str: Detected tool type
         """
         # Check if tool has explicit type marker
-        if hasattr(tool, 'tool_type'):
+        if hasattr(tool, 'tool_type') and isinstance(getattr(tool, 'tool_type', None), str):
             return tool.tool_type
+        
+        # Check tool name patterns (if available)
+        tool_name = getattr(tool, '__name__', '').lower()
+        if tool_name.startswith('mcp_') or 'mcp' in tool_name:
+            return 'mcp'
+        elif 'openapi' in tool_name or 'rest' in tool_name or 'api' in tool_name:
+            return 'openapi'
         
         # Check class name patterns
         class_name = tool.__class__.__name__.lower()
