@@ -39,13 +39,15 @@ from google.adk.cli.utils import envs
 from google.adk.cli.utils import evals
 from google.adk.cli.utils.agent_change_handler import AgentChangeEventHandler
 from google.adk.cli.utils.agent_loader import AgentLoader
+from google.adk.cli.utils.base_agent_loader import BaseAgentLoader
 
 logger = logging.getLogger(__name__)
 
 
 def get_enhanced_fast_api_app(
     *,
-    agents_dir: str,
+    agents_dir: Optional[str] = None,
+    agent_loader: Optional[BaseAgentLoader] = None,
     session_service_uri: Optional[str] = None,
     session_db_kwargs: Optional[Mapping[str, Any]] = None,
     artifact_service_uri: Optional[str] = None,
@@ -61,18 +63,20 @@ def get_enhanced_fast_api_app(
     reload_agents: bool = False,
     lifespan: Optional[Lifespan[FastAPI]] = None,
 ) -> FastAPI:
-    """Enhanced version of Google ADK's get_fast_api_app with credential service support.
+    """Enhanced version of Google ADK's get_fast_api_app with credential service and agent loader support.
     
-    This function is identical to Google ADK's get_fast_api_app except it accepts
-    a credential_service parameter instead of hardcoding InMemoryCredentialService.
+    This function extends Google ADK's get_fast_api_app with two key enhancements:
+    1. Accepts a credential_service parameter instead of hardcoding InMemoryCredentialService
+    2. Accepts an agent_loader parameter for custom agent loading logic
     
     Args:
-        agents_dir: Directory containing agent definitions.
+        agents_dir: Directory containing agent definitions (optional if agent_loader provided).
+        agent_loader: Custom agent loader instance (optional if agents_dir provided).
         session_service_uri: Session service URI.
         session_db_kwargs: Additional database configuration for session service.
         artifact_service_uri: Artifact service URI.
         memory_service_uri: Memory service URI.
-        credential_service: Custom credential service instance (NEW).
+        credential_service: Custom credential service instance.
         eval_storage_uri: Evaluation storage URI.
         allow_origins: CORS allowed origins.
         web: Whether to serve web UI.
@@ -85,7 +89,29 @@ def get_enhanced_fast_api_app(
         
     Returns:
         FastAPI: Configured FastAPI application.
+        
+    Raises:
+        ValueError: If neither agents_dir nor agent_loader is provided.
     """
+    # Validate agent configuration
+    if not agent_loader and not agents_dir:
+        raise ValueError("Either agent_loader or agents_dir must be provided")
+    
+    # Create or use provided agent loader
+    if agent_loader is not None:
+        final_agent_loader = agent_loader
+        # Try to extract agents_dir from AgentLoader for compatibility
+        if agents_dir is None and hasattr(agent_loader, 'agents_dir'):
+            agents_dir = agent_loader.agents_dir
+        elif agents_dir is None:
+            # For non-directory loaders, create a temp dir for eval managers
+            import tempfile
+            agents_dir = tempfile.gettempdir()
+    else:
+        final_agent_loader = AgentLoader(agents_dir)
+    
+    logger.info("Using agent loader: %s", type(final_agent_loader).__name__)
+    
     # Set up eval managers (same as ADK)
     if eval_storage_uri:
         gcs_eval_managers = evals.create_gcs_eval_managers_from_uri(eval_storage_uri)
@@ -189,12 +215,11 @@ def get_enhanced_fast_api_app(
         credential_service_instance = credential_service
         logger.info(f"Using enhanced credential service: {type(credential_service).__name__}")
 
-    # Initialize Agent Loader (same as ADK)
-    agent_loader = AgentLoader(agents_dir)
+    # Use configured agent loader (enhanced from ADK)
 
     # Create AdkWebServer with our custom credential service
     adk_web_server = AdkWebServer(
-        agent_loader=agent_loader,
+        agent_loader=final_agent_loader,
         session_service=session_service,
         artifact_service=artifact_service,
         memory_service=memory_service,
@@ -228,7 +253,7 @@ def get_enhanced_fast_api_app(
     if reload_agents:
         def setup_observer(observer: Observer, adk_web_server: AdkWebServer):
             agent_change_handler = AgentChangeEventHandler(
-                agent_loader=agent_loader,
+                agent_loader=final_agent_loader,
                 runners_to_clean=adk_web_server.runners_to_clean,
                 current_app_name_ref=adk_web_server.current_app_name_ref,
             )

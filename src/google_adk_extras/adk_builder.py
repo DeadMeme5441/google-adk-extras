@@ -24,8 +24,10 @@ from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.auth.credential_service.base_credential_service import BaseCredentialService
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.adk.cli.utils.agent_loader import AgentLoader
+from google.adk.cli.utils.base_agent_loader import BaseAgentLoader
 from google.adk.cli.adk_web_server import AdkWebServer
 
+from .custom_agent_loader import CustomAgentLoader
 from .credentials.base_custom_credential_service import BaseCustomCredentialService
 from .credentials.google_oauth2_credential_service import GoogleOAuth2CredentialService
 from .credentials.github_oauth2_credential_service import GitHubOAuth2CredentialService
@@ -87,6 +89,10 @@ class AdkBuilder:
         self._artifact_service: Optional[BaseArtifactService] = None
         self._memory_service: Optional[BaseMemoryService] = None
         self._credential_service: Optional[BaseCredentialService] = None
+        
+        # Agent loading configuration
+        self._agent_loader: Optional[BaseAgentLoader] = None
+        self._registered_agents: Dict[str, BaseAgent] = {}
         
         # Database configuration
         self._session_db_kwargs: Optional[Mapping[str, Any]] = None
@@ -346,6 +352,102 @@ class AdkBuilder:
         self._lifespan = lifespan
         return self
 
+    # Agent configuration methods
+    def with_agent_instance(self, name: str, agent: BaseAgent) -> "AdkBuilder":
+        """Register an agent instance by name for programmatic agent control.
+        
+        This allows you to define agents purely in code without requiring
+        directory structures or file-based definitions.
+        
+        Args:
+            name: Agent name for discovery and loading.
+            agent: BaseAgent instance to register.
+            
+        Returns:
+            AdkBuilder: Self for method chaining.
+            
+        Example:
+            ```python
+            from google.adk.agents import Agent
+            
+            my_agent = Agent(
+                name="dynamic_agent",
+                model="gemini-2.0-flash",
+                instructions="You are a helpful assistant."
+            )
+            
+            app = (AdkBuilder()
+                   .with_agent_instance("my_agent", my_agent)
+                   .build_fastapi_app())
+            ```
+        """
+        if not name or not name.strip():
+            raise ValueError("Agent name cannot be empty")
+            
+        if not isinstance(agent, BaseAgent):
+            raise ValueError(f"Agent must be BaseAgent instance, got {type(agent)}")
+        
+        self._registered_agents[name] = agent
+        logger.info("Registered agent instance: %s", name)
+        return self
+    
+    def with_agents(self, agents_dict: Dict[str, BaseAgent]) -> "AdkBuilder":
+        """Register multiple agent instances at once.
+        
+        Args:
+            agents_dict: Dictionary mapping agent names to BaseAgent instances.
+            
+        Returns:
+            AdkBuilder: Self for method chaining.
+            
+        Example:
+            ```python
+            agents = {
+                "agent1": Agent(...),
+                "agent2": Agent(...),
+            }
+            
+            app = (AdkBuilder()
+                   .with_agents(agents)
+                   .build_fastapi_app())
+            ```
+        """
+        if not isinstance(agents_dict, dict):
+            raise ValueError("Agents must be a dictionary mapping names to BaseAgent instances")
+        
+        for name, agent in agents_dict.items():
+            self.with_agent_instance(name, agent)
+        return self
+    
+    def with_agent_loader(self, loader: BaseAgentLoader) -> "AdkBuilder":
+        """Use a custom agent loader instead of directory-based loading.
+        
+        This provides full control over agent discovery and loading logic.
+        The custom loader will be used instead of creating a default AgentLoader.
+        
+        Args:
+            loader: BaseAgentLoader instance to use for agent loading.
+            
+        Returns:
+            AdkBuilder: Self for method chaining.
+            
+        Example:
+            ```python
+            custom_loader = CustomAgentLoader()
+            custom_loader.register_agent("agent1", my_agent)
+            
+            app = (AdkBuilder()
+                   .with_agent_loader(custom_loader)
+                   .build_fastapi_app())
+            ```
+        """
+        if not isinstance(loader, BaseAgentLoader):
+            raise ValueError(f"Agent loader must be BaseAgentLoader instance, got {type(loader)}")
+        
+        self._agent_loader = loader
+        logger.info("Set custom agent loader: %s", type(loader).__name__)
+        return self
+
     # Service creation methods
     def _create_session_service(self) -> BaseSessionService:
         """Create session service from configuration."""
@@ -418,6 +520,62 @@ class AdkBuilder:
             return self._parse_credential_service_uri(self._credential_service_uri)
         
         return InMemoryCredentialService()
+    
+    def _create_agent_loader(self) -> BaseAgentLoader:
+        """Create agent loader from configuration.
+        
+        Returns:
+            BaseAgentLoader: Configured agent loader instance.
+            
+        Raises:
+            ValueError: If no agent configuration is provided.
+        """
+        # If custom loader is provided, use it directly
+        if self._agent_loader is not None:
+            # If we also have registered agents, we need to register them
+            if self._registered_agents:
+                if isinstance(self._agent_loader, CustomAgentLoader):
+                    # Register agents into the existing CustomAgentLoader
+                    for name, agent in self._registered_agents.items():
+                        self._agent_loader.register_agent(name, agent)
+                    logger.info("Registered %d agents into existing CustomAgentLoader", 
+                              len(self._registered_agents))
+                else:
+                    logger.warning(
+                        "Custom agent loader is not CustomAgentLoader, but registered agents exist. "
+                        "Registered agents will be ignored. Consider using CustomAgentLoader."
+                    )
+            return self._agent_loader
+        
+        # If we have registered agents, create CustomAgentLoader
+        if self._registered_agents:
+            # Check if we also have agents_dir for fallback
+            fallback_loader = None
+            if self._agents_dir:
+                fallback_loader = AgentLoader(self._agents_dir)
+                logger.info("Creating CustomAgentLoader with directory fallback: %s", self._agents_dir)
+            else:
+                logger.info("Creating CustomAgentLoader without directory fallback")
+            
+            custom_loader = CustomAgentLoader(fallback_loader=fallback_loader)
+            
+            # Register all agents
+            for name, agent in self._registered_agents.items():
+                custom_loader.register_agent(name, agent)
+            
+            logger.info("Registered %d agents into CustomAgentLoader", len(self._registered_agents))
+            return custom_loader
+        
+        # If we only have agents_dir, create default AgentLoader
+        if self._agents_dir:
+            logger.info("Creating default AgentLoader for directory: %s", self._agents_dir)
+            return AgentLoader(self._agents_dir)
+        
+        # No agent configuration provided
+        raise ValueError(
+            "No agent configuration provided. Use with_agents_dir(), with_agent_instance(), "
+            "or with_agent_loader() to configure agents."
+        )
 
     def _parse_credential_service_uri(self, uri: str) -> BaseCredentialService:
         """Parse credential service URI and create appropriate service.
@@ -647,10 +805,8 @@ class AdkBuilder:
         Raises:
             ValueError: If required configuration is missing.
         """
-        if not self._agents_dir:
-            raise ValueError("agents_dir is required. Use with_agents_dir() to set it.")
-        
-        # Create services
+        # Create services (agent loader validates agent configuration)
+        agent_loader = self._create_agent_loader()
         session_service = self._create_session_service()
         artifact_service = self._create_artifact_service()
         memory_service = self._create_memory_service()
@@ -679,6 +835,7 @@ class AdkBuilder:
         
         app = get_enhanced_fast_api_app(
             agents_dir=self._agents_dir,
+            agent_loader=agent_loader,
             session_service_uri=self._session_service_uri,
             session_db_kwargs=self._session_db_kwargs,
             artifact_service_uri=self._artifact_service_uri,
