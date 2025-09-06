@@ -31,6 +31,12 @@ from .strategies import (
     OpenApiToolExecutionStrategy,
     ToolExecutionStrategyManager,
 )
+from .registry import (
+    EnhancedAgentRegistry,
+    EnhancedToolRegistry,
+    AgentRegistryConfig,
+    ToolRegistryConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +115,11 @@ class EnhancedRunner(Runner):
         enhanced_config: Optional[EnhancedRunConfig] = None,
         yaml_context: Optional[YamlSystemContext] = None,
         tool_strategy_manager: Optional[ToolExecutionStrategyManager] = None,
-        # Registry support (for Phase 2)
-        tool_registry: Optional[Any] = None,
-        agent_registry: Optional[Any] = None,
+        # Registry support
+        tool_registry: Optional[EnhancedToolRegistry] = None,
+        agent_registry: Optional[EnhancedAgentRegistry] = None,
+        agent_registry_config: Optional[AgentRegistryConfig] = None,
+        tool_registry_config: Optional[ToolRegistryConfig] = None,
     ):
         """Initialize EnhancedRunner.
         
@@ -139,14 +147,23 @@ class EnhancedRunner(Runner):
         # Store enhanced features before calling super().__init__
         self.enhanced_config = enhanced_config
         self.yaml_context = yaml_context or YamlSystemContext(system_name=app_name)
-        self.tool_registry = tool_registry
-        self.agent_registry = agent_registry
+        
+        # Initialize registries (Phase 2)
+        self._initialize_registries(
+            tool_registry, agent_registry,
+            tool_registry_config, agent_registry_config,
+            app_name
+        )
         
         # Initialize tool execution strategy manager
         if tool_strategy_manager:
             self.tool_strategy_manager = tool_strategy_manager
         else:
             self.tool_strategy_manager = self._create_default_strategy_manager()
+        
+        # Integrate tool registry with strategy manager if both exist
+        if self.tool_registry and self.tool_strategy_manager:
+            self._integrate_tool_registry_with_strategies()
         
         # Performance tracking
         self._performance_metrics = {
@@ -210,6 +227,112 @@ class EnhancedRunner(Runner):
         manager.set_default_strategy(default_strategy)
         
         return manager
+    
+    def _initialize_registries(
+        self,
+        tool_registry: Optional[EnhancedToolRegistry],
+        agent_registry: Optional[EnhancedAgentRegistry],
+        tool_registry_config: Optional[ToolRegistryConfig],
+        agent_registry_config: Optional[AgentRegistryConfig],
+        app_name: str
+    ) -> None:
+        """Initialize registries with proper configuration.
+        
+        Args:
+            tool_registry: Optional tool registry instance
+            agent_registry: Optional agent registry instance
+            tool_registry_config: Tool registry configuration
+            agent_registry_config: Agent registry configuration
+        """
+        # Initialize tool registry
+        if tool_registry:
+            self.tool_registry = tool_registry
+        elif self.enhanced_config.enable_tool_registry:
+            # Create default tool registry config if none provided
+            if not tool_registry_config:
+                tool_registry_config = ToolRegistryConfig(
+                    name=f"{app_name}_tool_registry"
+                )
+            
+            self.tool_registry = EnhancedToolRegistry(
+                config=tool_registry_config,
+                yaml_context=self.yaml_context
+            )
+            logger.info(f"Created tool registry: {tool_registry_config.name}")
+        else:
+            self.tool_registry = None
+        
+        # Initialize agent registry
+        if agent_registry:
+            self.agent_registry = agent_registry
+        elif self.enhanced_config.enable_agent_registry:
+            # Create default agent registry config if none provided
+            if not agent_registry_config:
+                agent_registry_config = AgentRegistryConfig(
+                    name=f"{app_name}_agent_registry"
+                )
+            
+            self.agent_registry = EnhancedAgentRegistry(
+                config=agent_registry_config,
+                yaml_context=self.yaml_context
+            )
+            logger.info(f"Created agent registry: {agent_registry_config.name}")
+        else:
+            self.agent_registry = None
+    
+    def _integrate_tool_registry_with_strategies(self) -> None:
+        """Integrate tool registry with strategy manager."""
+        if not self.tool_registry or not self.tool_strategy_manager:
+            return
+        
+        try:
+            # Register existing strategies in the tool registry
+            for strategy_name, strategy in self.tool_strategy_manager.strategies.items():
+                self.tool_registry.register_strategy(strategy_name, strategy)
+            
+            # Register default strategy if it exists
+            if self.tool_strategy_manager.default_strategy:
+                self.tool_registry.set_default_strategy(self.tool_strategy_manager.default_strategy)
+            
+            logger.info("Integrated tool registry with strategy manager")
+        except Exception as e:
+            logger.warning(f"Failed to integrate tool registry with strategies: {e}")
+    
+    async def startup_registries(self) -> None:
+        """Start up the registries if they exist."""
+        try:
+            if self.agent_registry:
+                await self.agent_registry.startup()
+                logger.info("Started agent registry")
+            
+            if self.tool_registry:
+                await self.tool_registry.startup()
+                logger.info("Started tool registry")
+        except Exception as e:
+            logger.error(f"Failed to start registries: {e}")
+            raise YamlSystemError(
+                f"Registry startup failed: {str(e)}",
+                context=self.yaml_context,
+                original_error=e,
+                suggested_fixes=[
+                    "Check registry configuration",
+                    "Verify registry dependencies",
+                    "Check system resources"
+                ]
+            )
+    
+    async def shutdown_registries(self) -> None:
+        """Shutdown the registries if they exist."""
+        try:
+            if self.tool_registry:
+                await self.tool_registry.shutdown()
+                logger.info("Shutdown tool registry")
+            
+            if self.agent_registry:
+                await self.agent_registry.shutdown()
+                logger.info("Shutdown agent registry")
+        except Exception as e:
+            logger.warning(f"Error during registry shutdown: {e}")
     
     async def run_async(
         self,
