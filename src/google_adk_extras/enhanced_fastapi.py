@@ -1,0 +1,387 @@
+"""Enhanced FastAPI app creation with credential service support.
+
+This module provides an enhanced version of Google ADK's get_fast_api_app function
+that properly supports custom credential services.
+"""
+
+import json
+import logging
+import os
+from pathlib import Path
+import shutil
+from typing import Any, Mapping, Optional, List
+
+import click
+from fastapi import FastAPI
+from fastapi import UploadFile
+from fastapi.responses import FileResponse
+from fastapi.responses import PlainTextResponse
+from opentelemetry.sdk.trace import export
+from opentelemetry.sdk.trace import TracerProvider
+from starlette.types import Lifespan
+from watchdog.observers import Observer
+
+from google.adk.artifacts.gcs_artifact_service import GcsArtifactService
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
+from google.adk.auth.credential_service.base_credential_service import BaseCredentialService
+from google.adk.evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
+from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
+from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
+from google.adk.memory.vertex_ai_memory_bank_service import VertexAiMemoryBankService
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.sessions.vertex_ai_session_service import VertexAiSessionService
+from google.adk.sessions.database_session_service import DatabaseSessionService
+from google.adk.utils.feature_decorator import working_in_progress
+from google.adk.cli.adk_web_server import AdkWebServer
+from google.adk.cli.utils import envs
+from google.adk.cli.utils import evals
+from google.adk.cli.utils.agent_change_handler import AgentChangeEventHandler
+from google.adk.cli.utils.agent_loader import AgentLoader
+
+logger = logging.getLogger(__name__)
+
+
+def get_enhanced_fast_api_app(
+    *,
+    agents_dir: str,
+    session_service_uri: Optional[str] = None,
+    session_db_kwargs: Optional[Mapping[str, Any]] = None,
+    artifact_service_uri: Optional[str] = None,
+    memory_service_uri: Optional[str] = None,
+    credential_service: Optional[BaseCredentialService] = None,  # NEW: Support custom credential service
+    eval_storage_uri: Optional[str] = None,
+    allow_origins: Optional[List[str]] = None,
+    web: bool = True,
+    a2a: bool = False,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    trace_to_cloud: bool = False,
+    reload_agents: bool = False,
+    lifespan: Optional[Lifespan[FastAPI]] = None,
+) -> FastAPI:
+    """Enhanced version of Google ADK's get_fast_api_app with credential service support.
+    
+    This function is identical to Google ADK's get_fast_api_app except it accepts
+    a credential_service parameter instead of hardcoding InMemoryCredentialService.
+    
+    Args:
+        agents_dir: Directory containing agent definitions.
+        session_service_uri: Session service URI.
+        session_db_kwargs: Additional database configuration for session service.
+        artifact_service_uri: Artifact service URI.
+        memory_service_uri: Memory service URI.
+        credential_service: Custom credential service instance (NEW).
+        eval_storage_uri: Evaluation storage URI.
+        allow_origins: CORS allowed origins.
+        web: Whether to serve web UI.
+        a2a: Whether to enable A2A protocol.
+        host: Server host.
+        port: Server port.
+        trace_to_cloud: Whether to enable cloud tracing.
+        reload_agents: Whether to enable hot reloading.
+        lifespan: FastAPI lifespan callable.
+        
+    Returns:
+        FastAPI: Configured FastAPI application.
+    """
+    # Set up eval managers (same as ADK)
+    if eval_storage_uri:
+        gcs_eval_managers = evals.create_gcs_eval_managers_from_uri(eval_storage_uri)
+        eval_sets_manager = gcs_eval_managers.eval_sets_manager
+        eval_set_results_manager = gcs_eval_managers.eval_set_results_manager
+    else:
+        eval_sets_manager = LocalEvalSetsManager(agents_dir=agents_dir)
+        eval_set_results_manager = LocalEvalSetResultsManager(agents_dir=agents_dir)
+
+    def _parse_agent_engine_resource_name(agent_engine_id_or_resource_name):
+        """Parse agent engine resource name (same as ADK)."""
+        if not agent_engine_id_or_resource_name:
+            raise click.ClickException(
+                "Agent engine resource name or resource id can not be empty."
+            )
+
+        if "/" in agent_engine_id_or_resource_name:
+            if len(agent_engine_id_or_resource_name.split("/")) != 6:
+                raise click.ClickException(
+                    "Agent engine resource name is mal-formatted. It should be of"
+                    " format: projects/{project_id}/locations/{location}/reasoningEngines/{resource_id}"
+                )
+            project = agent_engine_id_or_resource_name.split("/")[1]
+            location = agent_engine_id_or_resource_name.split("/")[3]
+            agent_engine_id = agent_engine_id_or_resource_name.split("/")[-1]
+        else:
+            envs.load_dotenv_for_agent("", agents_dir)
+            project = os.environ["GOOGLE_CLOUD_PROJECT"]
+            location = os.environ["GOOGLE_CLOUD_LOCATION"]
+            agent_engine_id = agent_engine_id_or_resource_name
+        return project, location, agent_engine_id
+
+    # Build the Memory service (same as ADK)
+    if memory_service_uri:
+        if memory_service_uri.startswith("rag://"):
+            from google.adk.memory.vertex_ai_rag_memory_service import VertexAiRagMemoryService
+            rag_corpus = memory_service_uri.split("://")[1]
+            if not rag_corpus:
+                raise click.ClickException("Rag corpus can not be empty.")
+            envs.load_dotenv_for_agent("", agents_dir)
+            memory_service = VertexAiRagMemoryService(
+                rag_corpus=f'projects/{os.environ["GOOGLE_CLOUD_PROJECT"]}/locations/{os.environ["GOOGLE_CLOUD_LOCATION"]}/ragCorpora/{rag_corpus}'
+            )
+        elif memory_service_uri.startswith("agentengine://"):
+            agent_engine_id_or_resource_name = memory_service_uri.split("://")[1]
+            project, location, agent_engine_id = _parse_agent_engine_resource_name(
+                agent_engine_id_or_resource_name
+            )
+            memory_service = VertexAiMemoryBankService(
+                project=project,
+                location=location,
+                agent_engine_id=agent_engine_id,
+            )
+        else:
+            raise click.ClickException(
+                "Unsupported memory service URI: %s" % memory_service_uri
+            )
+    else:
+        memory_service = InMemoryMemoryService()
+
+    # Build the Session service (same as ADK)
+    if session_service_uri:
+        if session_service_uri.startswith("agentengine://"):
+            agent_engine_id_or_resource_name = session_service_uri.split("://")[1]
+            project, location, agent_engine_id = _parse_agent_engine_resource_name(
+                agent_engine_id_or_resource_name
+            )
+            session_service = VertexAiSessionService(
+                project=project,
+                location=location,
+                agent_engine_id=agent_engine_id,
+            )
+        else:
+            # Database session additional settings
+            if session_db_kwargs is None:
+                session_db_kwargs = {}
+            session_service = DatabaseSessionService(
+                db_url=session_service_uri, **session_db_kwargs
+            )
+    else:
+        session_service = InMemorySessionService()
+
+    # Build the Artifact service (same as ADK)
+    if artifact_service_uri:
+        if artifact_service_uri.startswith("gs://"):
+            gcs_bucket = artifact_service_uri.split("://")[1]
+            artifact_service = GcsArtifactService(bucket_name=gcs_bucket)
+        else:
+            raise click.ClickException(
+                "Unsupported artifact service URI: %s" % artifact_service_uri
+            )
+    else:
+        artifact_service = InMemoryArtifactService()
+
+    # Build the Credential service - ENHANCED VERSION
+    if credential_service is None:
+        # Fallback to default ADK behavior
+        credential_service_instance = InMemoryCredentialService()
+        logger.info("Using default InMemoryCredentialService")
+    else:
+        credential_service_instance = credential_service
+        logger.info(f"Using enhanced credential service: {type(credential_service).__name__}")
+
+    # Initialize Agent Loader (same as ADK)
+    agent_loader = AgentLoader(agents_dir)
+
+    # Create AdkWebServer with our custom credential service
+    adk_web_server = AdkWebServer(
+        agent_loader=agent_loader,
+        session_service=session_service,
+        artifact_service=artifact_service,
+        memory_service=memory_service,
+        credential_service=credential_service_instance,  # Use our custom service
+        eval_sets_manager=eval_sets_manager,
+        eval_set_results_manager=eval_set_results_manager,
+        agents_dir=agents_dir,
+    )
+
+    # Callbacks & other optional args for FastAPI instance (same as ADK)
+    extra_fast_api_args = {}
+
+    if trace_to_cloud:
+        from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+
+        def register_processors(provider: TracerProvider) -> None:
+            envs.load_dotenv_for_agent("", agents_dir)
+            if project_id := os.environ.get("GOOGLE_CLOUD_PROJECT", None):
+                processor = export.BatchSpanProcessor(
+                    CloudTraceSpanExporter(project_id=project_id)
+                )
+                provider.add_span_processor(processor)
+            else:
+                logger.warning(
+                    "GOOGLE_CLOUD_PROJECT environment variable is not set. Tracing will"
+                    " not be enabled."
+                )
+
+        extra_fast_api_args.update(register_processors=register_processors)
+
+    if reload_agents:
+        def setup_observer(observer: Observer, adk_web_server: AdkWebServer):
+            agent_change_handler = AgentChangeEventHandler(
+                agent_loader=agent_loader,
+                runners_to_clean=adk_web_server.runners_to_clean,
+                current_app_name_ref=adk_web_server.current_app_name_ref,
+            )
+            observer.schedule(agent_change_handler, agents_dir, recursive=True)
+            observer.start()
+
+        def tear_down_observer(observer: Observer, _: AdkWebServer):
+            observer.stop()
+            observer.join()
+
+        extra_fast_api_args.update(
+            setup_observer=setup_observer,
+            tear_down_observer=tear_down_observer,
+        )
+
+    if web:
+        try:
+            # Try to find ADK's web assets
+            from google.adk.cli.fast_api import BASE_DIR
+            ANGULAR_DIST_PATH = BASE_DIR / "browser"
+        except (ImportError, AttributeError):
+            # Fallback if ADK structure changes
+            BASE_DIR = Path(__file__).parent.resolve()
+            ANGULAR_DIST_PATH = BASE_DIR / "browser"
+        
+        if ANGULAR_DIST_PATH.exists():
+            extra_fast_api_args.update(web_assets_dir=ANGULAR_DIST_PATH)
+        else:
+            logger.warning("Web UI assets not found, web interface will not be available")
+
+    # Create FastAPI app
+    app = adk_web_server.get_fast_api_app(
+        lifespan=lifespan,
+        allow_origins=allow_origins,
+        **extra_fast_api_args,
+    )
+
+    # Add additional endpoints that ADK normally adds
+    @working_in_progress("builder_save is not ready for use.")
+    @app.post("/builder/save", response_model_exclude_none=True)
+    async def builder_build(files: List[UploadFile]) -> bool:
+        base_path = Path.cwd() / agents_dir
+        for file in files:
+            try:
+                if not file.filename:
+                    logger.exception("Agent name is missing in the input files")
+                    return False
+                agent_name, filename = file.filename.split("/")
+                agent_dir = os.path.join(base_path, agent_name)
+                os.makedirs(agent_dir, exist_ok=True)
+                file_path = os.path.join(agent_dir, filename)
+                with open(file_path, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+            except Exception as e:
+                logger.exception("Error in builder_build: %s", e)
+                return False
+        return True
+
+    @working_in_progress("builder_get is not ready for use.")
+    @app.get(
+        "/builder/app/{app_name}",
+        response_model_exclude_none=True,
+        response_class=PlainTextResponse,
+    )
+    async def get_agent_builder(app_name: str, file_path: Optional[str] = None):
+        base_path = Path.cwd() / agents_dir
+        agent_dir = base_path / app_name
+        if not file_path:
+            file_name = "root_agent.yaml"
+            root_file_path = agent_dir / file_name
+            if not root_file_path.is_file():
+                return ""
+            else:
+                return FileResponse(
+                    path=root_file_path,
+                    media_type="application/x-yaml",
+                    filename=f"{app_name}.yaml",
+                    headers={"Cache-Control": "no-store"},
+                )
+        else:
+            agent_file_path = agent_dir / file_path
+            if not agent_file_path.is_file():
+                return ""
+            else:
+                return FileResponse(
+                    path=agent_file_path,
+                    media_type="application/x-yaml",
+                    filename=file_path,
+                    headers={"Cache-Control": "no-store"},
+                )
+
+    # A2A protocol support (same as ADK)
+    if a2a:
+        try:
+            from a2a.server.apps import A2AStarletteApplication
+            from a2a.server.request_handlers import DefaultRequestHandler
+            from a2a.server.tasks import InMemoryTaskStore
+            from a2a.types import AgentCard
+            from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+            from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
+
+        except ImportError as e:
+            import sys
+            if sys.version_info < (3, 10):
+                raise ImportError(
+                    "A2A requires Python 3.10 or above. Please upgrade your Python version."
+                ) from e
+            else:
+                raise e
+
+        base_path = Path.cwd() / agents_dir
+        if base_path.exists() and base_path.is_dir():
+            a2a_task_store = InMemoryTaskStore()
+
+            def create_a2a_runner_loader(captured_app_name: str):
+                async def _get_a2a_runner_async() -> Runner:
+                    return await adk_web_server.get_runner_async(captured_app_name)
+                return _get_a2a_runner_async
+
+            for p in base_path.iterdir():
+                if (
+                    p.is_file()
+                    or p.name.startswith((".", "__pycache__"))
+                    or not (p / "agent.json").is_file()
+                ):
+                    continue
+
+                app_name = p.name
+                logger.info("Setting up A2A agent: %s", app_name)
+
+                try:
+                    agent_executor = A2aAgentExecutor(
+                        runner=create_a2a_runner_loader(app_name),
+                    )
+                    request_handler = DefaultRequestHandler(
+                        agent_executor=agent_executor, task_store=a2a_task_store
+                    )
+                    with (p / "agent.json").open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        agent_card = AgentCard(**data)
+                    a2a_app = A2AStarletteApplication(
+                        agent_card=agent_card,
+                        http_handler=request_handler,
+                    )
+                    routes = a2a_app.routes(
+                        rpc_url=f"/a2a/{app_name}",
+                        agent_card_url=f"/a2a/{app_name}{AGENT_CARD_WELL_KNOWN_PATH}",
+                    )
+                    for new_route in routes:
+                        app.router.routes.append(new_route)
+                    logger.info("Successfully configured A2A agent: %s", app_name)
+                except Exception as e:
+                    logger.error("Failed to setup A2A agent %s: %s", app_name, e)
+
+    logger.info("Enhanced FastAPI app created with credential service support")
+    return app
