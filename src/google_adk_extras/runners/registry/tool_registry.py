@@ -10,11 +10,40 @@ This module extends the existing ToolExecutionStrategyManager with advanced feat
 
 import logging
 import asyncio
+import inspect
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, Optional, Set, Type, Union
 
 from google.adk.agents.invocation_context import InvocationContext
+
+# ADK Tool imports for enhanced support
+try:
+    from google.adk.tools.base_tool import BaseTool
+    from google.adk.tools.function_tool import FunctionTool
+    from google.adk.tools.agent_tool import AgentTool
+    from google.adk.tools.mcp_tool.mcp_tool import McpTool
+    from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+    from google.adk.tools.openapi_tool.openapi_spec_parser.rest_api_tool import RestApiTool
+    from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+    from google.adk.tools.google_tool import GoogleTool
+    from google.adk.tools.google_api_tool.google_api_tool import GoogleApiTool
+    from google.adk.tools.google_api_tool.google_api_toolset import GoogleApiToolset
+    from google.adk.tools.base_toolset import BaseToolset
+except ImportError as e:
+    logger.warning(f"Some ADK tool types not available: {e}")
+    # Fallback for development/testing
+    BaseTool = Any
+    FunctionTool = Any
+    AgentTool = Any
+    McpTool = Any
+    McpToolset = Any
+    RestApiTool = Any
+    OpenAPIToolset = Any
+    GoogleTool = Any
+    GoogleApiTool = Any
+    GoogleApiToolset = Any
+    BaseToolset = Any
 
 from ..strategies import ToolExecutionStrategyManager, ToolExecutionStrategy
 from ..errors import YamlSystemContext, YamlSystemError
@@ -29,22 +58,49 @@ from .config import ToolRegistryConfig
 logger = logging.getLogger(__name__)
 
 
+class ToolType(Enum):
+    """Supported ADK tool types."""
+    FUNCTION = "function"
+    MCP = "mcp"
+    OPENAPI = "openapi"
+    AGENT = "agent"
+    GOOGLE = "google"
+    GOOGLE_API = "google_api"
+    TOOLSET = "toolset"
+    UNKNOWN = "unknown"
+
+
 class ToolHealthStatus(Enum):
     """Tool-specific health status."""
     HEALTHY = "healthy"
+    INITIALIZING = "initializing"
     LOADING = "loading"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
     TIMEOUT = "timeout"
     UNAVAILABLE = "unavailable"
+    CONNECTION_ERROR = "connection_error"  # For MCP/API tools
+    AUTH_ERROR = "auth_error"  # For authenticated tools
 
 
 @dataclass
 class ToolRegistrationEvent(RegistryEvent):
     """Tool-specific registration event."""
     
-    tool_type: Optional[str] = None
+    tool_type: Optional[ToolType] = None
     """Type of the tool."""
+    
+    tool_version: Optional[str] = None
+    """Version of the tool if available."""
+    
+    toolset_name: Optional[str] = None
+    """Name of parent toolset if applicable."""
+    
+    has_auth: bool = False
+    """Whether tool requires authentication."""
+    
+    connection_info: Optional[Dict[str, Any]] = None
+    """Connection information for remote tools."""
     
     strategy_name: Optional[str] = None
     """Associated strategy name."""
@@ -60,19 +116,30 @@ class ToolInfo:
         self,
         name: str,
         tool: Any,
-        tool_type: str,
+        tool_type: Union[str, ToolType],
         strategy_name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ):
         self.name = name
         self.tool = tool
-        self.tool_type = tool_type
+        
+        # Ensure tool_type is ToolType enum
+        if isinstance(tool_type, str):
+            try:
+                self.tool_type = ToolType(tool_type.lower())
+            except ValueError:
+                self.tool_type = ToolType.UNKNOWN
+        else:
+            self.tool_type = tool_type
+        
         self.strategy_name = strategy_name
         self.metadata = metadata or {}
         self.registered_at = self._get_current_timestamp()
         self.last_used = None
         self.usage_count = 0
         self.error_count = 0
+        self.health_status = ToolHealthStatus.INITIALIZING
+        self.has_auth = self._check_has_auth(tool)
     
     def mark_used(self) -> None:
         """Mark tool as used (for statistics)."""
@@ -83,6 +150,16 @@ class ToolInfo:
         """Mark tool as having an error."""
         self.error_count += 1
     
+    def _check_has_auth(self, tool: Any) -> bool:
+        """Check if tool requires authentication."""
+        # Check for common auth indicators
+        auth_indicators = [
+            'auth_scheme', 'auth_credential', '_credentials_manager', 
+            '_auth_config', 'credentials_config', '_mcp_session_manager'
+        ]
+        
+        return any(hasattr(tool, attr) and getattr(tool, attr) is not None for attr in auth_indicators)
+    
     def _get_current_timestamp(self) -> float:
         """Get current timestamp."""
         import time
@@ -92,13 +169,15 @@ class ToolInfo:
         """Convert to dictionary."""
         return {
             'name': self.name,
-            'tool_type': self.tool_type,
+            'tool_type': self.tool_type.value if isinstance(self.tool_type, ToolType) else str(self.tool_type),
             'strategy_name': self.strategy_name,
             'metadata': self.metadata.copy(),
             'registered_at': self.registered_at,
             'last_used': self.last_used,
             'usage_count': self.usage_count,
             'error_count': self.error_count,
+            'health_status': self.health_status.value if isinstance(self.health_status, ToolHealthStatus) else str(self.health_status),
+            'has_auth': self.has_auth,
         }
 
 
@@ -148,13 +227,116 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
         self._tool_validators: List[Callable[[str, Any], bool]] = []
         self._execution_semaphore = asyncio.Semaphore(config.max_concurrent_executions)
         
+        # Enhanced features for ADK tool support
+        self._toolsets: Dict[str, BaseToolset] = {}
+        self._tool_type_counters: Dict[ToolType, int] = {t: 0 for t in ToolType}
+        
         logger.info(f"Initialized EnhancedToolRegistry '{config.name}' with dynamic_loading={config.enable_dynamic_loading}")
     
+    def detect_tool_type(self, tool: Any) -> ToolType:
+        """Detect tool type from tool object.
+        
+        Args:
+            tool: Tool object to analyze
+            
+        Returns:
+            Detected tool type
+        """
+        # Check instance types in order of specificity
+        if isinstance(tool, GoogleApiTool):
+            return ToolType.GOOGLE_API
+        elif isinstance(tool, GoogleTool):
+            return ToolType.GOOGLE
+        elif isinstance(tool, AgentTool):
+            return ToolType.AGENT
+        elif isinstance(tool, McpTool):
+            return ToolType.MCP
+        elif isinstance(tool, RestApiTool):
+            return ToolType.OPENAPI
+        elif isinstance(tool, FunctionTool):
+            return ToolType.FUNCTION
+        elif isinstance(tool, BaseToolset):
+            return ToolType.TOOLSET
+        else:
+            # Check for tool_type attribute or class name patterns
+            if hasattr(tool, 'tool_type') and isinstance(getattr(tool, 'tool_type', None), str):
+                try:
+                    return ToolType(tool.tool_type.lower())
+                except ValueError:
+                    pass
+            
+            # Fallback to class name analysis
+            class_name = tool.__class__.__name__.lower()
+            if 'function' in class_name:
+                return ToolType.FUNCTION
+            elif 'mcp' in class_name:
+                return ToolType.MCP
+            elif 'openapi' in class_name or 'rest' in class_name:
+                return ToolType.OPENAPI
+            elif 'agent' in class_name:
+                return ToolType.AGENT
+            elif 'googleapi' in class_name or ('google' in class_name and 'api' in class_name):
+                return ToolType.GOOGLE_API
+            elif 'google' in class_name:
+                return ToolType.GOOGLE
+            elif 'toolset' in class_name:
+                return ToolType.TOOLSET
+            
+            logger.warning(f"Could not detect tool type for {tool.__class__.__name__}, using UNKNOWN")
+            return ToolType.UNKNOWN
+
+    async def register_toolset(
+        self,
+        name: str,
+        toolset: BaseToolset,
+        auto_register_tools: bool = True,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Register a toolset and optionally its tools.
+        
+        Args:
+            name: Toolset name
+            toolset: Toolset instance
+            auto_register_tools: Whether to auto-register all tools in the toolset
+            metadata: Additional metadata
+            
+        Returns:
+            True if registration successful
+        """
+        if name in self._toolsets:
+            logger.warning(f"Toolset '{name}' already registered")
+            return False
+        
+        self._toolsets[name] = toolset
+        
+        if auto_register_tools:
+            try:
+                tools = await toolset.get_tools()
+                for tool in tools:
+                    tool_name = f"{name}.{tool.name}"
+                    tool_type = self.detect_tool_type(tool)
+                    tool_metadata = (metadata or {}).copy()
+                    tool_metadata['parent_toolset'] = name
+                    
+                    self.register_tool(tool_name, tool, tool_type.value, metadata=tool_metadata)
+            
+            except Exception as e:
+                logger.error(f"Error auto-registering tools from toolset '{name}': {e}")
+                # Cleanup partially registered tools
+                for tool_name in list(self._registered_tools.keys()):
+                    if tool_name.startswith(f"{name}."):
+                        self.unregister_tool(tool_name)
+                del self._toolsets[name]
+                return False
+        
+        logger.info(f"Successfully registered toolset '{name}' with {len(await toolset.get_tools()) if auto_register_tools else 0} tools")
+        return True
+
     def register_tool(
         self,
         name: str,
         tool: Any,
-        tool_type: str,
+        tool_type: Optional[Union[str, ToolType]] = None,
         strategy_name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
@@ -163,7 +345,7 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
         Args:
             name: Tool name
             tool: Tool instance or callable
-            tool_type: Type of tool (e.g., 'mcp', 'openapi', 'function')
+            tool_type: Type of tool (auto-detected if None)
             strategy_name: Associated strategy name
             metadata: Optional metadata about the tool
             
@@ -177,12 +359,19 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
                 suggested_fixes=["Provide a non-empty tool name"]
             )
         
-        if not tool_type or not tool_type.strip():
-            raise YamlSystemError(
-                "Tool type cannot be empty",
-                context=self.yaml_context.with_tool(name),
-                suggested_fixes=["Provide a valid tool type (e.g., 'mcp', 'openapi', 'function')"]
-            )
+        # Auto-detect tool type if not provided
+        if tool_type is None:
+            detected_tool_type = self.detect_tool_type(tool)
+            logger.debug(f"Auto-detected tool type '{detected_tool_type.value}' for tool '{name}'")
+        else:
+            # Convert string to ToolType if needed
+            if isinstance(tool_type, str):
+                try:
+                    detected_tool_type = ToolType(tool_type.lower())
+                except ValueError:
+                    detected_tool_type = ToolType.UNKNOWN
+            else:
+                detected_tool_type = tool_type
         
         # Check maximum tools limit
         if self.config.max_tools is not None:
@@ -199,9 +388,9 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
         
         # Validate tool type if restrictions are configured
         if self.config.allowed_tool_types is not None:
-            if tool_type not in self.config.allowed_tool_types:
+            if detected_tool_type.value not in self.config.allowed_tool_types:
                 raise YamlSystemError(
-                    f"Tool type '{tool_type}' not in allowed types: {self.config.allowed_tool_types}",
+                    f"Tool type '{detected_tool_type.value}' not in allowed types: {self.config.allowed_tool_types}",
                     context=self.yaml_context.with_tool(name),
                     suggested_fixes=[
                         f"Use one of the allowed tool types: {self.config.allowed_tool_types}",
@@ -236,12 +425,15 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
         
         if was_registered:
             replaced_tool = self._registered_tools[name].tool
+        else:
+            # Update tool type counter for new tools
+            self._tool_type_counters[detected_tool_type] += 1
         
         # Create tool info
         tool_info = ToolInfo(
             name=name,
             tool=tool,
-            tool_type=tool_type,
+            tool_type=detected_tool_type,
             strategy_name=strategy_name,
             metadata=metadata
         )
@@ -263,7 +455,8 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
                 registry_name=self.name,
                 item_name=name,
                 item=tool,
-                tool_type=tool_type,
+                tool_type=detected_tool_type,
+                has_auth=tool_info.has_auth,
                 strategy_name=strategy_name,
                 replaced_tool=replaced_tool,
                 metadata=metadata
@@ -271,7 +464,7 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
             self._emit_event(event)
         
         operation = "Updated" if was_registered else "Registered"
-        logger.info(f"{operation} tool '{name}' (type: {tool_type}, strategy: {strategy_name})")
+        logger.info(f"{operation} tool '{name}' (type: {detected_tool_type.value}, strategy: {strategy_name})")
     
     def unregister_tool(self, name: str) -> bool:
         """Unregister a tool with cleanup.
@@ -290,6 +483,9 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
         
         # Remove tool
         del self._registered_tools[name]
+        
+        # Update tool type counter
+        self._tool_type_counters[tool_info.tool_type] = max(0, self._tool_type_counters[tool_info.tool_type] - 1)
         
         # Clean up health info
         self._remove_health_info(name)
@@ -653,6 +849,611 @@ class EnhancedToolRegistry(ToolExecutionStrategyManager, EnhancedRegistryBase[An
         
         return stats
     
+    # Enhanced ADK tool type introspection methods
+    def get_tool_types(self) -> Dict[ToolType, int]:
+        """Get count of tools by type."""
+        return self._tool_type_counters.copy()
+
+    def get_tools_by_type(self, tool_type: ToolType) -> List[str]:
+        """Get list of tool names by type."""
+        return [name for name, tool_info in self._registered_tools.items() if tool_info.tool_type == tool_type]
+
+    def get_tool_metadata(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a specific tool."""
+        tool_info = self._registered_tools.get(tool_name)
+        return tool_info.metadata if tool_info else None
+
+    def get_tool_health(self, tool_name: str) -> Optional[ToolHealthStatus]:
+        """Get health status for a specific tool."""
+        tool_info = self._registered_tools.get(tool_name)
+        return tool_info.health_status if tool_info else None
+
+    def get_registered_toolsets(self) -> List[str]:
+        """Get list of registered toolset names."""
+        return list(self._toolsets.keys())
+
+    def get_toolset_tools(self, toolset_name: str) -> List[str]:
+        """Get list of tools from a specific toolset."""
+        if toolset_name not in self._toolsets:
+            return []
+        
+        return [name for name, tool_info in self._registered_tools.items() 
+                if tool_info.metadata.get('parent_toolset') == toolset_name]
+
+    def get_authenticated_tools(self) -> List[str]:
+        """Get list of tools that require authentication."""
+        return [name for name, tool_info in self._registered_tools.items() if tool_info.has_auth]
+
+    def get_tool_usage_stats(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """Get usage statistics for a specific tool."""
+        tool_info = self._registered_tools.get(tool_name)
+        if not tool_info:
+            return None
+        
+        return {
+            'usage_count': tool_info.usage_count,
+            'error_count': tool_info.error_count,
+            'error_rate': tool_info.error_count / max(tool_info.usage_count, 1),
+            'last_used': tool_info.last_used,
+            'registered_at': tool_info.registered_at
+        }
+
+    # Tool-Specific Registry Wrappers
+    
+    async def register_function_tool(
+        self,
+        name: str,
+        function: Callable,
+        metadata: Optional[Dict[str, Any]] = None,
+        validate_signature: bool = True,
+        validate_docstring: bool = True
+    ) -> bool:
+        """Register a FunctionTool with enhanced validation.
+        
+        Args:
+            name: Tool name
+            function: Python function to wrap
+            metadata: Additional metadata
+            validate_signature: Whether to validate function signature
+            validate_docstring: Whether to validate docstring presence
+            
+        Returns:
+            True if registration successful
+        """
+        try:
+            # Validate function if enabled
+            if validate_signature:
+                if not callable(function):
+                    raise YamlSystemError(
+                        f"Function '{name}' is not callable",
+                        context=self.yaml_context.with_tool(name),
+                        suggested_fixes=["Provide a callable function"]
+                    )
+                
+                # Check function signature
+                try:
+                    signature = inspect.signature(function)
+                    params = signature.parameters
+                    
+                    # Function should have at least some parameters (excluding tool_context)
+                    non_context_params = [p for p in params.values() 
+                                        if p.name not in ['tool_context', 'input_stream']]
+                    
+                    if not non_context_params and not getattr(function, '__doc__', None):
+                        logger.warning(f"Function '{name}' has no parameters and no docstring - may not be useful as a tool")
+                
+                except Exception as e:
+                    raise YamlSystemError(
+                        f"Cannot inspect function signature for '{name}': {e}",
+                        context=self.yaml_context.with_tool(name),
+                        original_error=e,
+                        suggested_fixes=["Ensure function has proper signature"]
+                    )
+            
+            if validate_docstring:
+                if not getattr(function, '__doc__', None) or not function.__doc__.strip():
+                    logger.warning(f"Function '{name}' has no docstring - tool description will be empty")
+            
+            # Create FunctionTool
+            function_tool = FunctionTool(function)
+            
+            # Extract metadata
+            extracted_metadata = await self._extract_function_tool_metadata(function_tool, function)
+            if metadata:
+                extracted_metadata.update(metadata)
+            
+            # Register tool
+            self.register_tool(name, function_tool, ToolType.FUNCTION, metadata=extracted_metadata)
+            
+            logger.info(f"Successfully registered FunctionTool '{name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to register FunctionTool '{name}': {e}")
+            return False
+    
+    async def register_mcp_tool(
+        self,
+        name: str,
+        mcp_tool: 'McpTool',
+        metadata: Optional[Dict[str, Any]] = None,
+        test_connection: bool = True
+    ) -> bool:
+        """Register an MCP tool with connection validation.
+        
+        Args:
+            name: Tool name
+            mcp_tool: MCP tool instance
+            metadata: Additional metadata
+            test_connection: Whether to test MCP connection
+            
+        Returns:
+            True if registration successful
+        """
+        try:
+            # Test MCP connection if enabled
+            if test_connection and hasattr(mcp_tool, '_mcp_session_manager'):
+                session_manager = mcp_tool._mcp_session_manager
+                try:
+                    # Try to create a session to test connectivity
+                    session = await session_manager.create_session()
+                    if not session:
+                        raise YamlSystemError(
+                            f"Cannot establish MCP session for tool '{name}'",
+                            context=self.yaml_context.with_tool(name),
+                            suggested_fixes=[
+                                "Check MCP server is running",
+                                "Verify connection parameters",
+                                "Check authentication credentials"
+                            ]
+                        )
+                except Exception as e:
+                    logger.warning(f"MCP connection test failed for '{name}': {e}")
+                    # Don't fail registration, but mark as connection error
+                    if name in self._registered_tools:
+                        self._registered_tools[name].health_status = ToolHealthStatus.CONNECTION_ERROR
+            
+            # Extract metadata
+            extracted_metadata = await self._extract_mcp_tool_metadata(mcp_tool)
+            if metadata:
+                extracted_metadata.update(metadata)
+            
+            # Register tool
+            self.register_tool(name, mcp_tool, ToolType.MCP, metadata=extracted_metadata)
+            
+            logger.info(f"Successfully registered MCP tool '{name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to register MCP tool '{name}': {e}")
+            return False
+    
+    async def register_openapi_tool(
+        self,
+        name: str,
+        rest_api_tool: 'RestApiTool',
+        metadata: Optional[Dict[str, Any]] = None,
+        validate_schema: bool = True,
+        test_endpoint: bool = False
+    ) -> bool:
+        """Register an OpenAPI/REST tool with schema validation.
+        
+        Args:
+            name: Tool name
+            rest_api_tool: REST API tool instance
+            metadata: Additional metadata
+            validate_schema: Whether to validate OpenAPI schema
+            test_endpoint: Whether to test endpoint connectivity
+            
+        Returns:
+            True if registration successful
+        """
+        try:
+            # Validate schema if enabled
+            if validate_schema:
+                try:
+                    declaration = rest_api_tool._get_declaration()
+                    if not declaration:
+                        logger.warning(f"OpenAPI tool '{name}' has no function declaration")
+                    elif not declaration.parameters:
+                        logger.warning(f"OpenAPI tool '{name}' has no parameters defined")
+                
+                except Exception as e:
+                    logger.warning(f"Schema validation failed for OpenAPI tool '{name}': {e}")
+            
+            # Test endpoint connectivity if enabled
+            if test_endpoint and hasattr(rest_api_tool, 'endpoint'):
+                # Basic endpoint validation - don't make actual HTTP calls in registration
+                endpoint = rest_api_tool.endpoint
+                if endpoint and hasattr(endpoint, 'url'):
+                    try:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(str(endpoint.url))
+                        if not parsed.netloc:
+                            logger.warning(f"OpenAPI tool '{name}' has invalid endpoint URL: {endpoint.url}")
+                    except Exception as e:
+                        logger.warning(f"Endpoint validation failed for '{name}': {e}")
+            
+            # Extract metadata
+            extracted_metadata = await self._extract_openapi_tool_metadata(rest_api_tool)
+            if metadata:
+                extracted_metadata.update(metadata)
+            
+            # Register tool
+            self.register_tool(name, rest_api_tool, ToolType.OPENAPI, metadata=extracted_metadata)
+            
+            logger.info(f"Successfully registered OpenAPI tool '{name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to register OpenAPI tool '{name}': {e}")
+            return False
+    
+    async def register_agent_tool(
+        self,
+        name: str,
+        agent_tool: 'AgentTool',
+        metadata: Optional[Dict[str, Any]] = None,
+        validate_agent: bool = True
+    ) -> bool:
+        """Register an AgentTool with agent validation.
+        
+        Args:
+            name: Tool name
+            agent_tool: Agent tool instance
+            metadata: Additional metadata
+            validate_agent: Whether to validate wrapped agent
+            
+        Returns:
+            True if registration successful
+        """
+        try:
+            # Validate wrapped agent if enabled
+            if validate_agent and hasattr(agent_tool, 'agent'):
+                agent = agent_tool.agent
+                
+                # Check agent has required attributes
+                if not hasattr(agent, 'name') or not agent.name:
+                    logger.warning(f"AgentTool '{name}' wraps agent with no name")
+                
+                if not hasattr(agent, 'description') or not agent.description:
+                    logger.warning(f"AgentTool '{name}' wraps agent with no description")
+                
+                # Check for circular references
+                if hasattr(agent, 'name') and agent.name == name:
+                    logger.warning(f"Potential circular reference: AgentTool '{name}' wraps agent with same name")
+            
+            # Extract metadata
+            extracted_metadata = await self._extract_agent_tool_metadata(agent_tool)
+            if metadata:
+                extracted_metadata.update(metadata)
+            
+            # Register tool
+            self.register_tool(name, agent_tool, ToolType.AGENT, metadata=extracted_metadata)
+            
+            logger.info(f"Successfully registered AgentTool '{name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to register AgentTool '{name}': {e}")
+            return False
+    
+    async def register_google_tool(
+        self,
+        name: str,
+        google_tool: Union['GoogleTool', 'GoogleApiTool'],
+        metadata: Optional[Dict[str, Any]] = None,
+        validate_credentials: bool = True
+    ) -> bool:
+        """Register a Google tool with credential validation.
+        
+        Args:
+            name: Tool name
+            google_tool: Google tool instance
+            metadata: Additional metadata
+            validate_credentials: Whether to validate Google credentials
+            
+        Returns:
+            True if registration successful
+        """
+        try:
+            # Try isinstance check first, fallback to detection logic
+            if isinstance(google_tool, GoogleApiTool):
+                tool_type = ToolType.GOOGLE_API
+            elif isinstance(google_tool, GoogleTool):
+                tool_type = ToolType.GOOGLE
+            else:
+                # Fallback to detection logic for tests/mocks
+                tool_type = self.detect_tool_type(google_tool)
+            
+            # Validate credentials if enabled
+            if validate_credentials:
+                has_credentials = False
+                
+                if isinstance(google_tool, GoogleTool) and hasattr(google_tool, '_credentials_manager'):
+                    has_credentials = google_tool._credentials_manager is not None
+                elif isinstance(google_tool, GoogleApiTool):
+                    # Check for auth configuration in wrapped REST tool
+                    if hasattr(google_tool, '_rest_api_tool'):
+                        rest_tool = google_tool._rest_api_tool
+                        has_credentials = (
+                            hasattr(rest_tool, 'auth_credential') and rest_tool.auth_credential is not None
+                        ) or (
+                            hasattr(rest_tool, 'auth_scheme') and rest_tool.auth_scheme is not None
+                        )
+                
+                if not has_credentials:
+                    logger.warning(f"Google tool '{name}' has no credentials configured - may fail at runtime")
+            
+            # Extract metadata
+            extracted_metadata = await self._extract_google_tool_metadata(google_tool)
+            if metadata:
+                extracted_metadata.update(metadata)
+            
+            # Register tool
+            self.register_tool(name, google_tool, tool_type, metadata=extracted_metadata)
+            
+            logger.info(f"Successfully registered {tool_type.value} tool '{name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to register Google tool '{name}': {e}")
+            return False
+    
+    # Enhanced Metadata Extraction Methods
+    
+    async def _extract_function_tool_metadata(self, function_tool: FunctionTool, original_function: Callable) -> Dict[str, Any]:
+        """Extract comprehensive metadata from FunctionTool."""
+        metadata = {
+            'tool_type': 'function',
+            'function_name': getattr(original_function, '__name__', 'unknown'),
+            'module': getattr(original_function, '__module__', 'unknown'),
+            'is_coroutine': inspect.iscoroutinefunction(original_function),
+            'docstring': getattr(original_function, '__doc__', '').strip() if getattr(original_function, '__doc__', None) else None
+        }
+        
+        try:
+            # Extract signature information
+            signature = inspect.signature(original_function)
+            metadata.update({
+                'signature': str(signature),
+                'parameters': {
+                    name: {
+                        'kind': str(param.kind),
+                        'default': str(param.default) if param.default != inspect.Parameter.empty else None,
+                        'annotation': str(param.annotation) if param.annotation != inspect.Parameter.empty else None
+                    }
+                    for name, param in signature.parameters.items()
+                },
+                'mandatory_args': function_tool._get_mandatory_args() if hasattr(function_tool, '_get_mandatory_args') else [],
+                'ignore_params': getattr(function_tool, '_ignore_params', [])
+            })
+        except Exception as e:
+            logger.debug(f"Could not extract signature metadata: {e}")
+            metadata['signature_error'] = str(e)
+        
+        # Extract function declaration
+        try:
+            declaration = function_tool._get_declaration()
+            if declaration:
+                metadata['function_declaration'] = {
+                    'name': declaration.name,
+                    'description': declaration.description,
+                    'has_parameters': declaration.parameters is not None
+                }
+        except Exception as e:
+            logger.debug(f"Could not extract function declaration: {e}")
+        
+        return metadata
+    
+    async def _extract_mcp_tool_metadata(self, mcp_tool: 'McpTool') -> Dict[str, Any]:
+        """Extract comprehensive metadata from MCP tool."""
+        metadata = {
+            'tool_type': 'mcp',
+            'has_session_manager': hasattr(mcp_tool, '_mcp_session_manager')
+        }
+        
+        # Extract MCP-specific information
+        if hasattr(mcp_tool, '_mcp_tool'):
+            mcp_base_tool = mcp_tool._mcp_tool
+            metadata.update({
+                'mcp_name': getattr(mcp_base_tool, 'name', None),
+                'mcp_description': getattr(mcp_base_tool, 'description', None),
+                'input_schema': getattr(mcp_base_tool, 'inputSchema', None)
+            })
+        
+        # Extract session manager information
+        if hasattr(mcp_tool, '_mcp_session_manager'):
+            session_manager = mcp_tool._mcp_session_manager
+            metadata.update({
+                'session_manager_type': session_manager.__class__.__name__,
+                'connection_params_type': getattr(session_manager, '_connection_params', {}).get('type', 'unknown') if hasattr(session_manager, '_connection_params') else 'unknown'
+            })
+        
+        # Check authentication configuration
+        auth_info = {}
+        if hasattr(mcp_tool, '_credentials_manager') and mcp_tool._credentials_manager:
+            auth_info['has_credentials_manager'] = True
+        if hasattr(mcp_tool, '_auth_config') and mcp_tool._auth_config:
+            auth_info['has_auth_config'] = True
+        metadata['auth_info'] = auth_info
+        
+        return metadata
+    
+    async def _extract_openapi_tool_metadata(self, rest_api_tool: 'RestApiTool') -> Dict[str, Any]:
+        """Extract comprehensive metadata from OpenAPI/REST tool."""
+        metadata = {
+            'tool_type': 'openapi'
+        }
+        
+        # Extract endpoint information
+        if hasattr(rest_api_tool, 'endpoint'):
+            endpoint = rest_api_tool.endpoint
+            if endpoint:
+                metadata.update({
+                    'endpoint': str(endpoint),
+                    'has_endpoint': True
+                })
+                
+                # Try to extract URL and method
+                if hasattr(endpoint, 'url'):
+                    metadata['endpoint_url'] = str(endpoint.url)
+                if hasattr(endpoint, 'method'):
+                    metadata['http_method'] = str(endpoint.method)
+        
+        # Extract operation information
+        if hasattr(rest_api_tool, 'operation'):
+            operation = rest_api_tool.operation
+            if operation:
+                metadata.update({
+                    'has_operation': True,
+                    'operation_id': getattr(operation, 'operationId', None),
+                    'http_method': getattr(operation, 'method', None) if hasattr(operation, 'method') else None
+                })
+        
+        # Extract authentication information
+        auth_info = {}
+        if hasattr(rest_api_tool, 'auth_scheme') and rest_api_tool.auth_scheme:
+            auth_info['has_auth_scheme'] = True
+            auth_info['auth_scheme_type'] = rest_api_tool.auth_scheme.__class__.__name__
+        if hasattr(rest_api_tool, 'auth_credential') and rest_api_tool.auth_credential:
+            auth_info['has_auth_credential'] = True
+        metadata['auth_info'] = auth_info
+        
+        # Extract function declaration
+        try:
+            declaration = rest_api_tool._get_declaration()
+            if declaration:
+                metadata['function_declaration'] = {
+                    'name': declaration.name,
+                    'description': declaration.description,
+                    'has_parameters': declaration.parameters is not None
+                }
+        except Exception as e:
+            logger.debug(f"Could not extract function declaration from REST tool: {e}")
+        
+        return metadata
+    
+    async def _extract_agent_tool_metadata(self, agent_tool: 'AgentTool') -> Dict[str, Any]:
+        """Extract comprehensive metadata from AgentTool."""
+        metadata = {
+            'tool_type': 'agent',
+            'skip_summarization': getattr(agent_tool, 'skip_summarization', False)
+        }
+        
+        # Extract wrapped agent information
+        if hasattr(agent_tool, 'agent'):
+            agent = agent_tool.agent
+            metadata.update({
+                'agent_name': getattr(agent, 'name', None),
+                'agent_description': getattr(agent, 'description', None),
+                'agent_class': agent.__class__.__name__,
+                'agent_module': agent.__class__.__module__
+            })
+            
+            # Check for schemas
+            schema_info = {}
+            if hasattr(agent, 'input_schema'):
+                schema_info['has_input_schema'] = agent.input_schema is not None
+                if agent.input_schema:
+                    schema_info['input_schema_type'] = agent.input_schema.__class__.__name__
+            
+            if hasattr(agent, 'output_schema'):
+                schema_info['has_output_schema'] = agent.output_schema is not None  
+                if agent.output_schema:
+                    schema_info['output_schema_type'] = agent.output_schema.__class__.__name__
+            
+            metadata['schema_info'] = schema_info
+        
+        # Extract function declaration
+        try:
+            declaration = agent_tool._get_declaration()
+            if declaration:
+                metadata['function_declaration'] = {
+                    'name': declaration.name,
+                    'description': declaration.description,
+                    'has_parameters': declaration.parameters is not None,
+                    'has_response_schema': hasattr(declaration, 'response') and declaration.response is not None
+                }
+        except Exception as e:
+            logger.debug(f"Could not extract function declaration from AgentTool: {e}")
+        
+        return metadata
+    
+    async def _extract_google_tool_metadata(self, google_tool: Union['GoogleTool', 'GoogleApiTool']) -> Dict[str, Any]:
+        """Extract comprehensive metadata from Google tools."""
+        if isinstance(google_tool, GoogleApiTool):
+            metadata = await self._extract_google_api_tool_metadata(google_tool)
+        elif isinstance(google_tool, GoogleTool):
+            metadata = await self._extract_google_base_tool_metadata(google_tool)
+        else:
+            metadata = {'tool_type': 'google', 'subtype': 'unknown'}
+        
+        return metadata
+    
+    async def _extract_google_api_tool_metadata(self, google_api_tool: 'GoogleApiTool') -> Dict[str, Any]:
+        """Extract metadata from GoogleApiTool."""
+        metadata = {
+            'tool_type': 'google_api',
+            'is_wrapper': True
+        }
+        
+        # Extract wrapped REST API tool information
+        if hasattr(google_api_tool, '_rest_api_tool'):
+            rest_tool = google_api_tool._rest_api_tool
+            metadata.update({
+                'wraps_rest_tool': True,
+                'rest_tool_name': getattr(rest_tool, 'name', None),
+                'rest_tool_description': getattr(rest_tool, 'description', None),
+                'rest_tool_class': rest_tool.__class__.__name__
+            })
+            
+            # Get OpenAPI metadata from wrapped tool
+            rest_metadata = await self._extract_openapi_tool_metadata(rest_tool)
+            metadata['rest_tool_metadata'] = rest_metadata
+        
+        # Extract Google-specific auth information
+        auth_info = {}
+        if hasattr(google_api_tool, '_client_id'):
+            auth_info['has_client_id'] = getattr(google_api_tool, '_client_id') is not None
+        if hasattr(google_api_tool, '_client_secret'):
+            auth_info['has_client_secret'] = getattr(google_api_tool, '_client_secret') is not None
+        if hasattr(google_api_tool, '_service_account'):
+            auth_info['has_service_account'] = getattr(google_api_tool, '_service_account') is not None
+        metadata['google_auth_info'] = auth_info
+        
+        return metadata
+    
+    async def _extract_google_base_tool_metadata(self, google_tool: 'GoogleTool') -> Dict[str, Any]:
+        """Extract metadata from GoogleTool."""
+        metadata = {
+            'tool_type': 'google',
+            'is_function_tool_subclass': True
+        }
+        
+        # Extract credentials manager information
+        if hasattr(google_tool, '_credentials_manager'):
+            creds_manager = google_tool._credentials_manager
+            metadata.update({
+                'has_credentials_manager': creds_manager is not None,
+                'credentials_manager_type': creds_manager.__class__.__name__ if creds_manager else None
+            })
+        
+        # Extract tool settings information
+        if hasattr(google_tool, '_tool_settings'):
+            settings = google_tool._tool_settings
+            metadata.update({
+                'has_tool_settings': settings is not None,
+                'tool_settings_type': settings.__class__.__name__ if settings else None
+            })
+        
+        # Extract function information (since GoogleTool extends FunctionTool)
+        if hasattr(google_tool, 'func'):
+            func_metadata = await self._extract_function_tool_metadata(google_tool, google_tool.func)
+            metadata['function_metadata'] = func_metadata
+        
+        return metadata
+
     def _get_current_timestamp(self) -> float:
         """Get current timestamp."""
         import time
