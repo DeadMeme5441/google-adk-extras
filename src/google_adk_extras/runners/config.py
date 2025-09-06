@@ -244,6 +244,21 @@ class EnhancedRunConfig(BaseModel):
     """Whether to operate in strict mode (fail fast on configuration errors)."""
     
     @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'EnhancedRunConfig':
+        """Create EnhancedRunConfig from dictionary configuration.
+        
+        This method provides the same functionality as from_yaml_dict but
+        with a different name for clarity when used with dictionary sources.
+        
+        Args:
+            config_dict: Dictionary configuration data
+            
+        Returns:
+            EnhancedRunConfig: Configured instance
+        """
+        return cls.from_yaml_dict(config_dict)
+    
+    @classmethod
     def from_yaml_dict(cls, yaml_config: Dict[str, Any]) -> 'EnhancedRunConfig':
         """Create EnhancedRunConfig from YAML runtime configuration.
         
@@ -325,6 +340,11 @@ class EnhancedRunConfig(BaseModel):
                 a2a_data['retry_config'] = retry_config
             enhanced_data['a2a_config'] = A2AConfig(**a2a_data)
         
+        # Circuit breaker configuration
+        if 'circuit_breaker_config' in yaml_config:
+            cb_data = yaml_config['circuit_breaker_config']
+            enhanced_data['circuit_breaker_config'] = CircuitBreakerConfig(**cb_data)
+
         # Debug configuration
         if 'debug' in yaml_config:
             debug_data = yaml_config['debug']
