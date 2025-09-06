@@ -379,6 +379,15 @@ class EnhancedRunner(Runner):
         }
         logger.info("Reset performance metrics")
     
+    @property
+    def performance_metrics(self) -> Dict[str, Any]:
+        """Get performance metrics as a property.
+        
+        Returns:
+            Dict[str, Any]: Performance metrics
+        """
+        return self.get_performance_metrics()
+    
     def update_yaml_context(self, context: YamlSystemContext):
         """Update the YAML system context.
         

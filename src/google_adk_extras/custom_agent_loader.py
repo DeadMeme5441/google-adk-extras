@@ -1,8 +1,8 @@
-"""CustomAgentLoader - Enhanced agent loader supporting both instances and directories.
+"""CustomAgentLoader - Enhanced agent loader for programmatic agent management.
 
 This module provides CustomAgentLoader which extends Google ADK's agent loading
-capabilities to support both programmatically registered agent instances and
-traditional directory-based agent discovery.
+capabilities to support programmatically registered agent instances with
+thread-safe registry management.
 """
 
 import logging
@@ -16,47 +16,29 @@ logger = logging.getLogger(__name__)
 
 
 class CustomAgentLoader(BaseAgentLoader):
-    """Enhanced agent loader supporting both agent instances and directory fallback.
+    """Enhanced agent loader for programmatic agent management.
     
     This loader allows you to:
     1. Register agent instances directly for programmatic control
-    2. Fall back to directory-based loading for traditional workflows  
-    3. Mix both approaches in a single application
-    4. Dynamically add/remove agents at runtime
-    
-    The loader checks registered instances first, then falls back to the
-    optional directory-based loader for discovery and loading.
+    2. Dynamically add/remove agents at runtime
+    3. Thread-safe access to agent registry
     
     Examples:
-        # Instance-only mode
+        # Register and use agents
         loader = CustomAgentLoader()
         loader.register_agent("my_agent", my_agent_instance)
+        agent = loader.load_agent("my_agent")
         
-        # Hybrid mode with directory fallback
-        directory_loader = AgentLoader("./agents")
-        loader = CustomAgentLoader(fallback_loader=directory_loader)
-        loader.register_agent("dynamic_agent", dynamic_instance)
-        
-        # Both registered and directory agents are available
-        agents = loader.list_agents()  # ['dynamic_agent', 'dir_agent1', 'dir_agent2']
+        # List all registered agents
+        agents = loader.list_agents()  # ['my_agent']
     """
     
-    def __init__(self, fallback_loader: Optional[BaseAgentLoader] = None):
-        """Initialize CustomAgentLoader.
-        
-        Args:
-            fallback_loader: Optional BaseAgentLoader to fall back to when
-                agents are not found in the registry. Typically an AgentLoader
-                configured with a directory path.
-        """
+    def __init__(self):
+        """Initialize CustomAgentLoader."""
         self._registered_agents: Dict[str, BaseAgent] = {}
-        self._fallback_loader = fallback_loader
         self._lock = threading.RLock()  # Thread-safe access to registry
         
-        logger.debug(
-            "CustomAgentLoader initialized with fallback: %s", 
-            type(fallback_loader).__name__ if fallback_loader else "None"
-        )
+        logger.debug("CustomAgentLoader initialized")
     
     def register_agent(self, name: str, agent: BaseAgent) -> None:
         """Register an agent instance by name.
@@ -131,9 +113,6 @@ class CustomAgentLoader(BaseAgentLoader):
     def load_agent(self, name: str) -> BaseAgent:
         """Load an agent by name.
         
-        Checks registered agents first, then falls back to directory loader
-        if configured. This provides a hybrid loading approach.
-        
         Args:
             name: Name of agent to load.
             
@@ -141,24 +120,14 @@ class CustomAgentLoader(BaseAgentLoader):
             BaseAgent: The loaded agent instance.
             
         Raises:
-            ValueError: If agent is not found in registry or fallback loader.
+            ValueError: If agent is not found in registry.
         """
-        # Check registered agents first
         with self._lock:
             if name in self._registered_agents:
                 logger.debug("Loading registered agent: %s", name)
                 return self._registered_agents[name]
         
-        # Fall back to directory loader if configured
-        if self._fallback_loader:
-            try:
-                logger.debug("Loading agent from fallback loader: %s", name)
-                return self._fallback_loader.load_agent(name)
-            except Exception as e:
-                logger.debug("Fallback loader failed for %s: %s", name, e)
-                # Continue to raise our own error below
-        
-        # Agent not found anywhere
+        # Agent not found
         available_agents = self.list_agents()
         raise ValueError(
             f"Agent '{name}' not found. "
@@ -166,72 +135,22 @@ class CustomAgentLoader(BaseAgentLoader):
         )
     
     def list_agents(self) -> List[str]:
-        """List all available agents from both registry and fallback loader.
+        """List all available agents from registry.
         
         Returns:
-            List[str]: Sorted list of all available agent names.
+            List[str]: Sorted list of all registered agent names.
         """
-        agent_names = set()
-        
-        # Add registered agents
         with self._lock:
-            agent_names.update(self._registered_agents.keys())
+            agent_names = list(self._registered_agents.keys())
         
-        # Add fallback loader agents if available
-        if self._fallback_loader:
-            try:
-                fallback_agents = self._fallback_loader.list_agents()
-                agent_names.update(fallback_agents)
-                logger.debug(
-                    "Found %d fallback agents: %s", 
-                    len(fallback_agents), fallback_agents
-                )
-            except Exception as e:
-                logger.warning("Failed to list agents from fallback loader: %s", e)
-        
-        sorted_agents = sorted(list(agent_names))
-        logger.debug("Total available agents: %d", len(sorted_agents))
+        sorted_agents = sorted(agent_names)
+        logger.debug("Total registered agents: %d", len(sorted_agents))
         return sorted_agents
     
-    def has_fallback_loader(self) -> bool:
-        """Check if a fallback loader is configured.
-        
-        Returns:
-            bool: True if fallback loader is configured, False otherwise.
-        """
-        return self._fallback_loader is not None
-    
-    def get_agent_source(self, name: str) -> str:
-        """Get the source of an agent (registry or fallback).
-        
-        Args:
-            name: Agent name to check.
-            
-        Returns:
-            str: "registry", "fallback", or "not_found".
-        """
-        with self._lock:
-            if name in self._registered_agents:
-                return "registry"
-        
-        if self._fallback_loader:
-            try:
-                fallback_agents = self._fallback_loader.list_agents()
-                if name in fallback_agents:
-                    return "fallback"
-            except Exception:
-                pass
-        
-        return "not_found"
     
     def __repr__(self) -> str:
         """String representation of the loader."""
         with self._lock:
             registered_count = len(self._registered_agents)
         
-        fallback_info = (
-            f", fallback={type(self._fallback_loader).__name__}" 
-            if self._fallback_loader else ""
-        )
-        
-        return f"CustomAgentLoader(registered={registered_count}{fallback_info})"
+        return f"CustomAgentLoader(registered={registered_count})"

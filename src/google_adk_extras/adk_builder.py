@@ -18,7 +18,7 @@ from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.artifacts.base_artifact_service import BaseArtifactService
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-from google.adk.artifacts.gcs_artifact_service import GcsArtifactService
+# GCS removed - vendor specific
 from google.adk.memory.base_memory_service import BaseMemoryService
 from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.auth.credential_service.base_credential_service import BaseCredentialService
@@ -139,7 +139,9 @@ class AdkBuilder:
         Supported URIs:
         - "sqlite:///./sessions.db" - SQLite database
         - "postgresql://user:pass@host/db" - PostgreSQL database  
-        - "agentengine://resource-id" - Vertex AI Agent Engine
+        - "yaml://path/to/sessions.yaml" - YAML file session storage
+        - "redis://localhost:6379" - Redis session storage
+        - "mongodb://localhost:27017/sessions" - MongoDB session storage
         
         Args:
             uri: Session service URI.
@@ -172,8 +174,11 @@ class AdkBuilder:
         """Configure memory service using URI.
         
         Supported URIs:
-        - "rag://corpus-id" - Vertex AI RAG
-        - "agentengine://resource-id" - Vertex AI Agent Engine
+        - "yaml://path/to/memory.yaml" - YAML file memory storage
+        - "redis://localhost:6379" - Redis memory storage
+        - "sqlite:///./memory.db" - SQLite database
+        - "postgresql://user:pass@host/db" - PostgreSQL database
+        - "mongodb://localhost:27017/memory" - MongoDB memory storage
         
         Args:
             uri: Memory service URI.
@@ -455,20 +460,23 @@ class AdkBuilder:
             return self._session_service
 
         if self._session_service_uri:
-            if self._session_service_uri.startswith("agentengine://"):
-                from google.adk.sessions.vertex_ai_session_service import VertexAiSessionService
-                # Parse agent engine resource
-                agent_engine_id = self._session_service_uri.split("://")[1]
-                # This would need project/location from environment
-                return VertexAiSessionService(
-                    project=os.environ["GOOGLE_CLOUD_PROJECT"],
-                    location=os.environ["GOOGLE_CLOUD_LOCATION"], 
-                    agent_engine_id=agent_engine_id
-                )
+            db_kwargs = self._session_db_kwargs or {}
+            
+            if self._session_service_uri.startswith("yaml://"):
+                from .sessions.yaml_file_session_service import YamlFileSessionService
+                base_directory = self._session_service_uri.split("://")[1]
+                return YamlFileSessionService(base_directory=base_directory)
+            elif self._session_service_uri.startswith("redis://"):
+                from .sessions.redis_session_service import RedisSessionService
+                return RedisSessionService(connection_string=self._session_service_uri)
+            elif self._session_service_uri.startswith("mongodb://"):
+                from .sessions.mongo_session_service import MongoSessionService
+                return MongoSessionService(connection_string=self._session_service_uri)
+            elif self._session_service_uri.startswith(("sqlite://", "postgresql://", "mysql://")):
+                from .sessions.sql_session_service import SQLSessionService
+                return SQLSessionService(database_url=self._session_service_uri)
             else:
-                # Database session service
-                db_kwargs = self._session_db_kwargs or {}
-                return DatabaseSessionService(db_url=self._session_service_uri, **db_kwargs)
+                raise ValueError(f"Unsupported session service URI format: {self._session_service_uri}")
         
         return InMemorySessionService()
 
@@ -478,9 +486,20 @@ class AdkBuilder:
             return self._artifact_service
 
         if self._artifact_service_uri:
-            if self._artifact_service_uri.startswith("gs://"):
+            if self._artifact_service_uri.startswith("local://"):
+                from .artifacts.local_folder_artifact_service import LocalFolderArtifactService  
+                base_directory = self._artifact_service_uri.split("://")[1]
+                return LocalFolderArtifactService(base_directory=base_directory)
+            elif self._artifact_service_uri.startswith("s3://"):
+                from .artifacts.s3_artifact_service import S3ArtifactService
                 bucket_name = self._artifact_service_uri.split("://")[1]
-                return GcsArtifactService(bucket_name=bucket_name)
+                return S3ArtifactService(bucket_name=bucket_name)
+            elif self._artifact_service_uri.startswith(("sqlite://", "postgresql://", "mysql://")):
+                from .artifacts.sql_artifact_service import SQLArtifactService
+                return SQLArtifactService(database_url=self._artifact_service_uri)
+            elif self._artifact_service_uri.startswith("mongodb://"):
+                from .artifacts.mongo_artifact_service import MongoArtifactService
+                return MongoArtifactService(connection_string=self._artifact_service_uri)
             else:
                 raise ValueError(f"Unsupported artifact service URI: {self._artifact_service_uri}")
         
@@ -492,20 +511,19 @@ class AdkBuilder:
             return self._memory_service
 
         if self._memory_service_uri:
-            if self._memory_service_uri.startswith("rag://"):
-                from google.adk.memory.vertex_ai_rag_memory_service import VertexAiRagMemoryService
-                rag_corpus = self._memory_service_uri.split("://")[1]
-                return VertexAiRagMemoryService(
-                    rag_corpus=f'projects/{os.environ["GOOGLE_CLOUD_PROJECT"]}/locations/{os.environ["GOOGLE_CLOUD_LOCATION"]}/ragCorpora/{rag_corpus}'
-                )
-            elif self._memory_service_uri.startswith("agentengine://"):
-                from google.adk.memory.vertex_ai_memory_bank_service import VertexAiMemoryBankService
-                agent_engine_id = self._memory_service_uri.split("://")[1]
-                return VertexAiMemoryBankService(
-                    project=os.environ["GOOGLE_CLOUD_PROJECT"],
-                    location=os.environ["GOOGLE_CLOUD_LOCATION"],
-                    agent_engine_id=agent_engine_id
-                )
+            if self._memory_service_uri.startswith("yaml://"):
+                from .memory.yaml_file_memory_service import YamlFileMemoryService
+                base_directory = self._memory_service_uri.split("://")[1]
+                return YamlFileMemoryService(base_directory=base_directory)
+            elif self._memory_service_uri.startswith("redis://"):
+                from .memory.redis_memory_service import RedisMemoryService
+                return RedisMemoryService(connection_string=self._memory_service_uri)
+            elif self._memory_service_uri.startswith(("sqlite://", "postgresql://", "mysql://")):
+                from .memory.sql_memory_service import SQLMemoryService
+                return SQLMemoryService(database_url=self._memory_service_uri)
+            elif self._memory_service_uri.startswith("mongodb://"):
+                from .memory.mongo_memory_service import MongoMemoryService
+                return MongoMemoryService(connection_string=self._memory_service_uri)
             else:
                 raise ValueError(f"Unsupported memory service URI: {self._memory_service_uri}")
         
@@ -549,15 +567,12 @@ class AdkBuilder:
         
         # If we have registered agents, create CustomAgentLoader
         if self._registered_agents:
-            # Check if we also have agents_dir for fallback
-            fallback_loader = None
+            # Create CustomAgentLoader (no fallback support)
             if self._agents_dir:
-                fallback_loader = AgentLoader(self._agents_dir)
-                logger.info("Creating CustomAgentLoader with directory fallback: %s", self._agents_dir)
-            else:
-                logger.info("Creating CustomAgentLoader without directory fallback")
+                raise ValueError("Cannot use agents_dir with registered agents - use either directory-based OR instance-based loading, not both")
             
-            custom_loader = CustomAgentLoader(fallback_loader=fallback_loader)
+            logger.info("Creating CustomAgentLoader with registered agents")
+            custom_loader = CustomAgentLoader()
             
             # Register all agents
             for name, agent in self._registered_agents.items():

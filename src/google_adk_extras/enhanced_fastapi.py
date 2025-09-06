@@ -35,6 +35,10 @@ from google.adk.sessions.vertex_ai_session_service import VertexAiSessionService
 from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.utils.feature_decorator import working_in_progress
 from google.adk.cli.adk_web_server import AdkWebServer
+from .enhanced_adk_web_server import EnhancedAdkWebServer
+from .runners.config import EnhancedRunConfig
+from .runners.errors import YamlSystemContext
+from .runners.strategies import ToolExecutionStrategyManager
 from google.adk.cli.utils import envs
 from google.adk.cli.utils import evals
 from google.adk.cli.utils.agent_change_handler import AgentChangeEventHandler
@@ -62,12 +66,20 @@ def get_enhanced_fast_api_app(
     trace_to_cloud: bool = False,
     reload_agents: bool = False,
     lifespan: Optional[Lifespan[FastAPI]] = None,
+    # Enhanced Runner features (NEW)
+    enhanced_config: Optional[EnhancedRunConfig] = None,
+    yaml_context: Optional[YamlSystemContext] = None,
+    tool_strategy_manager: Optional[ToolExecutionStrategyManager] = None,
 ) -> FastAPI:
-    """Enhanced version of Google ADK's get_fast_api_app with credential service and agent loader support.
+    """Enhanced version of Google ADK's get_fast_api_app with EnhancedRunner integration.
     
-    This function extends Google ADK's get_fast_api_app with two key enhancements:
-    1. Accepts a credential_service parameter instead of hardcoding InMemoryCredentialService
-    2. Accepts an agent_loader parameter for custom agent loading logic
+    This function extends Google ADK's get_fast_api_app with enhanced capabilities:
+    1. Uses EnhancedAdkWebServer which creates EnhancedRunner instances
+    2. Supports custom credential services instead of hardcoding InMemoryCredentialService
+    3. Supports custom agent loading logic
+    4. Provides advanced tool execution strategies (MCP, OpenAPI, Function tools)
+    5. Enables circuit breakers, retry policies, and performance monitoring
+    6. Supports YAML-driven configuration and error context
     
     Args:
         agents_dir: Directory containing agent definitions (optional if agent_loader provided).
@@ -86,6 +98,9 @@ def get_enhanced_fast_api_app(
         trace_to_cloud: Whether to enable cloud tracing.
         reload_agents: Whether to enable hot reloading.
         lifespan: FastAPI lifespan callable.
+        enhanced_config: Enhanced runner configuration with tool timeouts, retries, etc.
+        yaml_context: YAML system context for error handling and debugging.
+        tool_strategy_manager: Manager for tool execution strategies (MCP, OpenAPI, etc.).
         
     Returns:
         FastAPI: Configured FastAPI application.
@@ -208,17 +223,17 @@ def get_enhanced_fast_api_app(
 
     # Build the Credential service - ENHANCED VERSION
     if credential_service is None:
-        # Fallback to default ADK behavior
         credential_service_instance = InMemoryCredentialService()
         logger.info("Using default InMemoryCredentialService")
     else:
         credential_service_instance = credential_service
-        logger.info(f"Using enhanced credential service: {type(credential_service).__name__}")
+        logger.info(f"Using provided credential service: {type(credential_service).__name__}")
 
     # Use configured agent loader (enhanced from ADK)
 
-    # Create AdkWebServer with our custom credential service
-    adk_web_server = AdkWebServer(
+    # Create EnhancedAdkWebServer with our custom credential service and enhanced features
+    adk_web_server = EnhancedAdkWebServer(
+        # Standard ADK parameters
         agent_loader=final_agent_loader,
         session_service=session_service,
         artifact_service=artifact_service,
@@ -227,6 +242,10 @@ def get_enhanced_fast_api_app(
         eval_sets_manager=eval_sets_manager,
         eval_set_results_manager=eval_set_results_manager,
         agents_dir=agents_dir,
+        # Enhanced features
+        enhanced_config=enhanced_config,
+        yaml_context=yaml_context,
+        tool_strategy_manager=tool_strategy_manager,
     )
 
     # Callbacks & other optional args for FastAPI instance (same as ADK)
@@ -290,6 +309,9 @@ def get_enhanced_fast_api_app(
         allow_origins=allow_origins,
         **extra_fast_api_args,
     )
+    
+    # Store the ADK web server in app state for testing access
+    app.state.adk_web_server = adk_web_server
 
     # Add additional endpoints that ADK normally adds
     @working_in_progress("builder_save is not ready for use.")

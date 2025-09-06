@@ -196,7 +196,7 @@ tools: []
         """Test error handling for invalid agents directory."""
         builder = AdkBuilder()
         
-        with pytest.raises(ValueError, match="agents_dir is required"):
+        with pytest.raises(ValueError, match="No agent configuration provided"):
             builder.build_fastapi_app()
     
     def test_error_handling_nonexistent_agents_dir(self):
@@ -231,8 +231,11 @@ tools: []
     
     def test_lifespan_integration(self):
         """Test FastAPI lifespan integration."""
+        from contextlib import asynccontextmanager
+        
         lifespan_called = {"startup": False, "shutdown": False}
         
+        @asynccontextmanager
         async def test_lifespan(app: FastAPI):
             lifespan_called["startup"] = True
             yield

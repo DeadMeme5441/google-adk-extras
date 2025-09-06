@@ -58,7 +58,6 @@ class TestAgentInstancesIntegration:
         agent_loader = builder._create_agent_loader()
         
         assert isinstance(agent_loader, CustomAgentLoader)
-        assert not agent_loader.has_fallback_loader()
         assert agent_loader.is_registered("agent1")
         assert agent_loader.is_registered("agent2")
         
@@ -73,8 +72,8 @@ class TestAgentInstancesIntegration:
         agents = agent_loader.list_agents()
         assert sorted(agents) == ["agent1", "agent2"]
     
-    def test_adk_builder_with_hybrid_agents(self):
-        """Test AdkBuilder with both agent instances and directory fallback."""
+    def test_adk_builder_with_directory_only(self):
+        """Test AdkBuilder with directory agents only."""
         # Create a test agent directory structure
         test_agent_dir = os.path.join(self.agents_dir, "directory_agent")
         os.makedirs(test_agent_dir, exist_ok=True)
@@ -93,30 +92,22 @@ root_agent = Agent(
             f.write(agent_content)
         
         builder = (AdkBuilder()
-                  .with_agents_dir(self.agents_dir)
-                  .with_agent_instance("instance_agent", self.agent1))
+                  .with_agents_dir(self.agents_dir))
         
+        # Should create standard AgentLoader, not CustomAgentLoader
         agent_loader = builder._create_agent_loader()
         
-        assert isinstance(agent_loader, CustomAgentLoader)
-        assert agent_loader.has_fallback_loader()
-        assert agent_loader.is_registered("instance_agent")
-        
-        # Test listing combines both sources
-        agents = agent_loader.list_agents()
-        assert "instance_agent" in agents
-        # Note: directory_agent might not appear due to ADK loading requirements
-        
-        # Test loading instance agent takes priority
-        loaded_agent = agent_loader.load_agent("instance_agent")
-        assert loaded_agent is self.agent1
+        # Should be the standard ADK AgentLoader
+        from google.adk.cli.utils.agent_loader import AgentLoader
+        assert isinstance(agent_loader, AgentLoader)
     
-    @patch('google_adk_extras.enhanced_fastapi.AdkWebServer')
+    @patch('google_adk_extras.enhanced_fastapi.EnhancedAdkWebServer')
     def test_enhanced_fastapi_with_custom_agent_loader(self, mock_adk_web_server):
         """Test enhanced FastAPI app with custom agent loader."""
         # Create mock AdkWebServer
         mock_server_instance = MagicMock()
         mock_app = MagicMock(spec=FastAPI)
+        mock_app.state = MagicMock()  # Add state attribute
         mock_server_instance.get_fast_api_app.return_value = mock_app
         mock_adk_web_server.return_value = mock_server_instance
         
@@ -138,18 +129,18 @@ root_agent = Agent(
         # Verify app was returned
         assert app is mock_app
     
-    @patch('google_adk_extras.enhanced_fastapi.AdkWebServer')
+    @patch('google_adk_extras.enhanced_fastapi.EnhancedAdkWebServer')
     def test_adk_builder_full_integration(self, mock_adk_web_server):
         """Test full integration from AdkBuilder to FastAPI app."""
         # Setup mock AdkWebServer
         mock_server_instance = MagicMock()
         mock_app = MagicMock(spec=FastAPI)
+        mock_app.state = MagicMock()  # Add state attribute
         mock_server_instance.get_fast_api_app.return_value = mock_app
         mock_adk_web_server.return_value = mock_server_instance
         
         # Build FastAPI app with agent instances
         builder = (AdkBuilder()
-                  .with_agents_dir(self.temp_dir)  # Required for eval managers
                   .with_agent_instance("api_agent", self.agent1)
                   .with_agent_instance("helper_agent", self.agent2)
                   .with_web_ui(False))
@@ -211,7 +202,7 @@ root_agent = Agent(
         loader2 = builder2._create_agent_loader()
         assert isinstance(loader2, AgentLoader)  # Uses directory loader directly
     
-    @patch('google_adk_extras.enhanced_fastapi.AdkWebServer')
+    @patch('google_adk_extras.enhanced_fastapi.EnhancedAdkWebServer')
     def test_error_handling_in_fastapi_integration(self, mock_adk_web_server):
         """Test error handling in FastAPI integration."""
         # Should raise error without agents_dir or agent_loader
@@ -224,79 +215,39 @@ root_agent = Agent(
         
         mock_server_instance = MagicMock()
         mock_app = MagicMock(spec=FastAPI)
+        mock_app.state = MagicMock()  # Add state attribute
         mock_server_instance.get_fast_api_app.return_value = mock_app
         mock_adk_web_server.return_value = mock_server_instance
         
         app = get_enhanced_fast_api_app(agent_loader=custom_loader, web=False)
         assert app is mock_app
     
-    def test_agent_priority_and_fallback_behavior(self):
-        """Test that registered agents take priority over directory agents."""
-        # Create directory agent
-        test_agent_dir = os.path.join(self.agents_dir, "priority_test")
-        os.makedirs(test_agent_dir, exist_ok=True)
-        
-        agent_content = '''
-from google.adk.agents import Agent
-
-root_agent = Agent(
-    name="priority_test",
-    model="gemini-2.0-flash",
-    instructions="Directory agent for priority testing."
-)
-'''
-        with open(os.path.join(test_agent_dir, "agent.py"), "w") as f:
-            f.write(agent_content)
-        
-        # Create builder with both directory and instance for same name
+    def test_cannot_use_both_agents_dir_and_instances(self):
+        """Test that using both agents_dir and instances raises error."""
+        # Create builder with both directory and instance
         builder = (AdkBuilder()
                   .with_agents_dir(self.agents_dir)
-                  .with_agent_instance("priority_test", self.agent1))
+                  .with_agent_instance("test_agent", self.agent1))
         
-        agent_loader = builder._create_agent_loader()
-        
-        # Registered agent should take priority
-        loaded_agent = agent_loader.load_agent("priority_test")
-        assert loaded_agent is self.agent1  # Instance, not directory agent
-        
-        # Source should be registry
-        assert agent_loader.get_agent_source("priority_test") == "registry"
+        # Should raise error when trying to create agent loader
+        with pytest.raises(ValueError, match="Cannot use agents_dir with registered agents"):
+            builder._create_agent_loader()
     
-    def test_agent_discovery_and_listing(self):
-        """Test agent discovery combines all sources correctly."""
-        # Create some directory agents
-        for i in range(2):
-            agent_dir = os.path.join(self.agents_dir, f"dir_agent_{i}")
-            os.makedirs(agent_dir, exist_ok=True)
-            
-            agent_content = f'''
-from google.adk.agents import Agent
-
-root_agent = Agent(
-    name="dir_agent_{i}",
-    model="gemini-2.0-flash",
-    instructions="Directory agent {i}."
-)
-'''
-            with open(os.path.join(agent_dir, "agent.py"), "w") as f:
-                f.write(agent_content)
-        
+    def test_agent_instance_only_listing(self):
+        """Test agent listing with instances only."""
         builder = (AdkBuilder()
-                  .with_agents_dir(self.agents_dir)
                   .with_agent_instance("instance_agent_1", self.agent1)
                   .with_agent_instance("instance_agent_2", self.agent2))
         
         agent_loader = builder._create_agent_loader()
         agents = agent_loader.list_agents()
         
-        # Should include both registered and directory agents
-        assert "instance_agent_1" in agents
-        assert "instance_agent_2" in agents
-        # Directory agents may or may not appear due to ADK loading requirements
+        # Should include only registered agents
+        assert sorted(agents) == ["instance_agent_1", "instance_agent_2"]
         
-        # Test source detection
-        assert agent_loader.get_agent_source("instance_agent_1") == "registry"
-        assert agent_loader.get_agent_source("instance_agent_2") == "registry"
+        # Test loading
+        assert agent_loader.load_agent("instance_agent_1") is self.agent1
+        assert agent_loader.load_agent("instance_agent_2") is self.agent2
 
 
 class TestAgentInstancesErrorHandling:

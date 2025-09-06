@@ -57,7 +57,8 @@ class MockAgent(BaseAgent):
     """Mock agent for integration testing."""
     
     def __init__(self, name: str = "test_agent"):
-        self.name = name
+        # Properly initialize Pydantic BaseModel with required fields
+        super().__init__(name=name)
         self._invocation_count = 0
     
     async def run(self, context, **kwargs):
@@ -80,6 +81,19 @@ class MockSessionService(BaseSessionService):
     async def get_session(self, session_id: str, **kwargs):
         """Mock get session."""
         return self._sessions.get(session_id)
+    
+    async def delete_session(self, session_id: str, **kwargs):
+        """Mock delete session."""
+        if session_id in self._sessions:
+            del self._sessions[session_id]
+            return True
+        return False
+    
+    async def list_sessions(self, user_id: str = None, **kwargs):
+        """Mock list sessions."""
+        if user_id:
+            return [s for s in self._sessions.values() if s.get("user_id") == user_id]
+        return list(self._sessions.values())
 
 
 class TestEnhancedRunConfigYamlIntegration:
@@ -110,19 +124,19 @@ class TestEnhancedRunConfigYamlIntegration:
             'retry_policies': {
                 'default': {
                     'max_attempts': 4,
-                    'strategy': 'EXPONENTIAL_BACKOFF',
+                    'strategy': 'exponential_backoff',
                     'base_delay': 1.5,
                     'max_delay': 30.0,
                     'jitter': True
                 },
                 'mcp_tools': {
                     'max_attempts': 2,
-                    'strategy': 'FIXED_DELAY',
+                    'strategy': 'fixed_delay',
                     'base_delay': 0.8
                 },
                 'critical_operations': {
                     'max_attempts': 6,
-                    'strategy': 'LINEAR_BACKOFF',
+                    'strategy': 'linear_backoff',
                     'base_delay': 2.0
                 }
             },
@@ -131,7 +145,7 @@ class TestEnhancedRunConfigYamlIntegration:
                 'connection_pool_size': 15,
                 'retry_config': {
                     'max_attempts': 3,
-                    'strategy': 'EXPONENTIAL_BACKOFF',
+                    'strategy': 'exponential_backoff',
                     'base_delay': 2.0
                 }
             },
@@ -284,8 +298,8 @@ class TestEnhancedRunnerIntegration:
                 'function_tools': 15.0
             },
             'retry_policies': {
-                'default': {'max_attempts': 3, 'strategy': 'EXPONENTIAL_BACKOFF'},
-                'mcp_tools': {'max_attempts': 2, 'strategy': 'IMMEDIATE'}
+                'default': {'max_attempts': 3, 'strategy': 'exponential_backoff'},
+                'mcp_tools': {'max_attempts': 2, 'strategy': 'immediate'}
             },
             'debug': {'enabled': True, 'trace_agent_flow': True},
             'enable_circuit_breaker': True,
@@ -468,16 +482,16 @@ class TestToolExecutionStrategyIntegration:
             'retry_policies': {
                 'default': {
                     'max_attempts': 3,
-                    'strategy': 'EXPONENTIAL_BACKOFF',
+                    'strategy': 'exponential_backoff',
                     'base_delay': 1.0
                 },
                 'mcp_tools': {
                     'max_attempts': 2,
-                    'strategy': 'IMMEDIATE'
+                    'strategy': 'immediate'
                 },
                 'openapi_tools': {
                     'max_attempts': 4,
-                    'strategy': 'FIXED_DELAY',
+                    'strategy': 'fixed_delay',
                     'base_delay': 2.0
                 }
             }
@@ -534,8 +548,8 @@ class TestToolExecutionStrategyIntegration:
                 'function_tools': 15.0
             },
             'retry_policies': {
-                'mcp_tools': {'max_attempts': 2, 'strategy': 'IMMEDIATE'},
-                'openapi_tools': {'max_attempts': 3, 'strategy': 'FIXED_DELAY', 'base_delay': 1.0}
+                'mcp_tools': {'max_attempts': 2, 'strategy': 'immediate'},
+                'openapi_tools': {'max_attempts': 3, 'strategy': 'fixed_delay', 'base_delay': 1.0}
             }
         })
         
@@ -850,13 +864,13 @@ class TestPhase1FullIntegration:
             'retry_policies': {
                 'default': {
                     'max_attempts': 3,
-                    'strategy': 'EXPONENTIAL_BACKOFF',
+                    'strategy': 'exponential_backoff',
                     'base_delay': 1.0,
                     'jitter': True
                 },
                 'mcp_tools': {
                     'max_attempts': 2,
-                    'strategy': 'IMMEDIATE'
+                    'strategy': 'immediate'
                 }
             },
             'debug': {

@@ -1,16 +1,11 @@
 """Unit tests for CustomAgentLoader."""
 
 import pytest
-import tempfile
-import os
-import shutil
 import threading
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 
 from google.adk.agents.base_agent import BaseAgent
-from google.adk.cli.utils.base_agent_loader import BaseAgentLoader
-from google.adk.cli.utils.agent_loader import AgentLoader
 
 from google_adk_extras.custom_agent_loader import CustomAgentLoader
 
@@ -26,26 +21,14 @@ class TestCustomAgentLoader:
         
         self.mock_agent2 = Mock(spec=BaseAgent)
         self.mock_agent2.name = "test_agent2"
-        
-        self.mock_agent3 = Mock(spec=BaseAgent)
-        self.mock_agent3.name = "fallback_agent"
 
-    def test_initialization_without_fallback(self):
-        """Test CustomAgentLoader initialization without fallback loader."""
+    def test_initialization_basic(self):
+        """Test CustomAgentLoader basic initialization."""
         loader = CustomAgentLoader()
         
         assert loader is not None
         assert len(loader.get_registered_agents()) == 0
-        assert not loader.has_fallback_loader()
         assert repr(loader) == "CustomAgentLoader(registered=0)"
-
-    def test_initialization_with_fallback(self):
-        """Test CustomAgentLoader initialization with fallback loader."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        
-        assert loader.has_fallback_loader()
-        assert repr(loader) == "CustomAgentLoader(registered=0, fallback=Mock)"
 
     def test_register_agent_success(self):
         """Test successful agent registration."""
@@ -130,32 +113,6 @@ class TestCustomAgentLoader:
         
         assert loaded_agent is self.mock_agent1
 
-    def test_load_agent_from_fallback(self):
-        """Test loading agent from fallback loader."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.load_agent.return_value = self.mock_agent3
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        
-        loaded_agent = loader.load_agent("fallback_agent")
-        
-        assert loaded_agent is self.mock_agent3
-        fallback_loader.load_agent.assert_called_once_with("fallback_agent")
-
-    def test_load_agent_registry_priority(self):
-        """Test that registry takes priority over fallback."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.load_agent.return_value = self.mock_agent3
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        loader.register_agent("priority_test", self.mock_agent1)
-        
-        loaded_agent = loader.load_agent("priority_test")
-        
-        # Should load from registry, not fallback
-        assert loaded_agent is self.mock_agent1
-        fallback_loader.load_agent.assert_not_called()
-
     def test_load_agent_not_found(self):
         """Test loading non-existent agent."""
         loader = CustomAgentLoader()
@@ -163,15 +120,14 @@ class TestCustomAgentLoader:
         with pytest.raises(ValueError, match="Agent 'nonexistent' not found"):
             loader.load_agent("nonexistent")
 
-    def test_load_agent_fallback_failure(self):
-        """Test loading agent when fallback loader fails."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.load_agent.side_effect = ValueError("Fallback failed")
+    def test_load_agent_with_available_agents_info(self):
+        """Test that error message includes available agents."""
+        loader = CustomAgentLoader()
+        loader.register_agent("agent1", self.mock_agent1)
+        loader.register_agent("agent2", self.mock_agent2)
         
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        
-        with pytest.raises(ValueError, match="Agent 'missing' not found"):
-            loader.load_agent("missing")
+        with pytest.raises(ValueError, match="Available agents: \\['agent1', 'agent2'\\]"):
+            loader.load_agent("nonexistent")
 
     def test_list_agents_registry_only(self):
         """Test listing agents from registry only."""
@@ -183,77 +139,26 @@ class TestCustomAgentLoader:
         
         assert sorted(agents) == ["agent1", "agent2"]
 
-    def test_list_agents_fallback_only(self):
-        """Test listing agents from fallback only."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.list_agents.return_value = ["fallback1", "fallback2"]
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
+    def test_list_agents_empty(self):
+        """Test listing agents when registry is empty."""
+        loader = CustomAgentLoader()
         
         agents = loader.list_agents()
         
-        assert sorted(agents) == ["fallback1", "fallback2"]
+        assert agents == []
 
-    def test_list_agents_combined(self):
-        """Test listing agents from both registry and fallback."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.list_agents.return_value = ["fallback1", "fallback2"]
+    def test_get_registered_agents_copy(self):
+        """Test that get_registered_agents returns a copy."""
+        loader = CustomAgentLoader()
+        loader.register_agent("test_agent", self.mock_agent1)
         
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        loader.register_agent("registry1", self.mock_agent1)
-        loader.register_agent("registry2", self.mock_agent2)
+        # Get the agents dict and try to modify it
+        agents_dict = loader.get_registered_agents()
+        agents_dict["new_agent"] = self.mock_agent2
         
-        agents = loader.list_agents()
-        
-        assert sorted(agents) == ["fallback1", "fallback2", "registry1", "registry2"]
-
-    def test_list_agents_duplicate_names(self):
-        """Test listing agents with duplicate names (registry overrides)."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.list_agents.return_value = ["duplicate", "fallback_only"]
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        loader.register_agent("duplicate", self.mock_agent1)
-        loader.register_agent("registry_only", self.mock_agent2)
-        
-        agents = loader.list_agents()
-        
-        # Should not have duplicates
-        assert sorted(agents) == ["duplicate", "fallback_only", "registry_only"]
-
-    def test_list_agents_fallback_error(self):
-        """Test listing agents when fallback loader fails."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.list_agents.side_effect = Exception("Fallback error")
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        loader.register_agent("registry1", self.mock_agent1)
-        
-        agents = loader.list_agents()
-        
-        # Should still return registry agents despite fallback error
-        assert agents == ["registry1"]
-
-    def test_get_agent_source(self):
-        """Test getting agent source information."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.list_agents.return_value = ["fallback_agent"]
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        loader.register_agent("registry_agent", self.mock_agent1)
-        
-        assert loader.get_agent_source("registry_agent") == "registry"
-        assert loader.get_agent_source("fallback_agent") == "fallback"
-        assert loader.get_agent_source("nonexistent") == "not_found"
-
-    def test_get_agent_source_fallback_error(self):
-        """Test getting agent source when fallback fails."""
-        fallback_loader = Mock(spec=BaseAgentLoader)
-        fallback_loader.list_agents.side_effect = Exception("Fallback error")
-        
-        loader = CustomAgentLoader(fallback_loader=fallback_loader)
-        
-        assert loader.get_agent_source("any_agent") == "not_found"
+        # Original registry should not be affected
+        assert len(loader.get_registered_agents()) == 1
+        assert "new_agent" not in loader.get_registered_agents()
 
     def test_thread_safety_registration(self):
         """Test thread safety of agent registration."""
@@ -339,83 +244,3 @@ class TestCustomAgentLoader:
         # Verify some agents were successfully loaded and unregistered
         assert len(load_results) > 0
         assert len(unregister_results) == 10
-
-
-class TestCustomAgentLoaderIntegration:
-    """Integration tests for CustomAgentLoader with real AgentLoader."""
-
-    def setup_method(self):
-        """Set up test environment with real agent directory."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.agents_dir = os.path.join(self.temp_dir, "agents")
-        os.makedirs(self.agents_dir, exist_ok=True)
-        
-        # Create a test agent directory structure
-        self.test_agent_dir = os.path.join(self.agents_dir, "test_agent")
-        os.makedirs(self.test_agent_dir, exist_ok=True)
-        
-        # Create agent.py file with root_agent
-        agent_content = '''
-from google.adk.agents import Agent
-
-root_agent = Agent(
-    name="test_agent",
-    model="gemini-2.0-flash",
-    instructions="Test agent for integration testing."
-)
-'''
-        with open(os.path.join(self.test_agent_dir, "agent.py"), "w") as f:
-            f.write(agent_content)
-
-    def teardown_method(self):
-        """Clean up test environment."""
-        if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
-
-    def test_hybrid_operation_real_fallback(self):
-        """Test CustomAgentLoader with real AgentLoader fallback."""
-        # This test requires actual ADK functionality and might need to be skipped
-        # in some test environments
-        try:
-            fallback_loader = AgentLoader(self.agents_dir)
-            loader = CustomAgentLoader(fallback_loader=fallback_loader)
-            
-            # Register a custom agent
-            mock_agent = Mock(spec=BaseAgent)
-            mock_agent.name = "custom_agent"
-            loader.register_agent("custom_agent", mock_agent)
-            
-            # Test listing combines both
-            agents = loader.list_agents()
-            assert "custom_agent" in agents
-            # Note: "test_agent" might not appear depending on ADK's actual loading
-            
-            # Test loading custom agent
-            loaded_custom = loader.load_agent("custom_agent")
-            assert loaded_custom is mock_agent
-            
-            # Test agent source detection
-            assert loader.get_agent_source("custom_agent") == "registry"
-            
-        except Exception as e:
-            # Skip test if ADK functionality is not available
-            pytest.skip(f"ADK integration not available: {e}")
-
-    def test_registry_override_fallback(self):
-        """Test that registry agents override fallback agents with same name."""
-        try:
-            fallback_loader = AgentLoader(self.agents_dir)
-            loader = CustomAgentLoader(fallback_loader=fallback_loader)
-            
-            # Register agent with same name as directory agent
-            mock_agent = Mock(spec=BaseAgent)
-            mock_agent.name = "test_agent_override"
-            loader.register_agent("test_agent", mock_agent)
-            
-            # Loading should return registry agent, not directory agent
-            loaded_agent = loader.load_agent("test_agent")
-            assert loaded_agent is mock_agent
-            assert loader.get_agent_source("test_agent") == "registry"
-            
-        except Exception as e:
-            pytest.skip(f"ADK integration not available: {e}")

@@ -121,15 +121,16 @@ class TestAdkBuilder:
         
         credential_service = builder._create_credential_service()
         assert isinstance(credential_service, HTTPBasicAuthCredentialService)
-        assert credential_service.default_username == "username"
-        assert credential_service.default_password == "password"
+        assert credential_service.username == "username"
+        assert credential_service.password == "password"
     
     def test_credential_service_uri_parsing_invalid(self):
         """Test invalid credential service URI handling."""
         builder = AdkBuilder()
         
-        with pytest.raises(ValueError, match="Unsupported credential service URI"):
-            builder.with_credential_service_uri("invalid://test")
+        builder.with_credential_service_uri("invalid://test")
+        with pytest.raises(ValueError, match="Failed to parse credential service URI"):
+            builder._create_credential_service()
     
     def test_cors_configuration(self):
         """Test CORS origins configuration."""
@@ -164,10 +165,10 @@ class TestAdkBuilder:
         """Test that building FastAPI app requires agents directory."""
         builder = AdkBuilder()
         
-        with pytest.raises(ValueError, match="agents_dir is required"):
+        with pytest.raises(ValueError, match="No agent configuration provided"):
             builder.build_fastapi_app()
     
-    @patch('google_adk_extras.adk_builder.get_enhanced_fast_api_app')
+    @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
     def test_build_fastapi_app_calls_enhanced_function(self, mock_enhanced_app):
         """Test that build_fastapi_app calls our enhanced function."""
         mock_app = MagicMock(spec=FastAPI)
@@ -184,7 +185,7 @@ class TestAdkBuilder:
             assert 'credential_service' in call_kwargs
             assert result is mock_app
     
-    @patch('google_adk_extras.adk_builder.get_enhanced_fast_api_app')
+    @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
     def test_build_fastapi_app_with_custom_credential_service(self, mock_enhanced_app):
         """Test building FastAPI app with custom credential service."""
         mock_app = MagicMock(spec=FastAPI)
@@ -203,7 +204,7 @@ class TestAdkBuilder:
             call_kwargs = mock_enhanced_app.call_args[1]
             assert call_kwargs['credential_service'] is cred_service
     
-    @patch('google_adk_extras.adk_builder.get_enhanced_fast_api_app')
+    @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
     def test_build_fastapi_app_with_all_options(self, mock_enhanced_app):
         """Test building FastAPI app with all configuration options."""
         mock_app = MagicMock(spec=FastAPI)
@@ -216,10 +217,10 @@ class TestAdkBuilder:
             builder = (AdkBuilder()
                       .with_agents_dir(temp_dir)
                       .with_session_service("sqlite:///test.db")
-                      .with_artifact_service("gs://test-bucket")
-                      .with_memory_service("rag://test-corpus")
+                      .with_artifact_service("local:///tmp/artifacts")
+                      .with_memory_service("yaml:///tmp/memory.yaml")
                       .with_credential_service_uri("jwt://secret@issuer=test")
-                      .with_eval_storage("gs://eval-bucket")
+                      .with_eval_storage("local:///tmp/eval")
                       .with_cors(["http://localhost:3000"])
                       .with_web_ui(True)
                       .with_a2a_protocol(False)
@@ -234,9 +235,9 @@ class TestAdkBuilder:
             call_kwargs = mock_enhanced_app.call_args[1]
             assert call_kwargs['agents_dir'] == temp_dir
             assert call_kwargs['session_service_uri'] == "sqlite:///test.db"
-            assert call_kwargs['artifact_service_uri'] == "gs://test-bucket"
-            assert call_kwargs['memory_service_uri'] == "rag://test-corpus"
-            assert call_kwargs['eval_storage_uri'] == "gs://eval-bucket"
+            assert call_kwargs['artifact_service_uri'] == "local:///tmp/artifacts"
+            assert call_kwargs['memory_service_uri'] == "yaml:///tmp/memory.yaml"
+            assert call_kwargs['eval_storage_uri'] == "local:///tmp/eval"
             assert call_kwargs['allow_origins'] == ["http://localhost:3000"]
             assert call_kwargs['web'] is True
             assert call_kwargs['a2a'] is False
@@ -247,9 +248,8 @@ class TestAdkBuilder:
             assert call_kwargs['lifespan'] is test_lifespan
             assert 'credential_service' in call_kwargs
     
-    @patch('asyncio.run')
-    @patch('google_adk_extras.adk_builder.get_enhanced_fast_api_app')
-    def test_credential_service_initialization(self, mock_enhanced_app, mock_asyncio_run):
+    @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
+    def test_credential_service_initialization(self, mock_enhanced_app):
         """Test that custom credential services are properly initialized."""
         mock_app = MagicMock(spec=FastAPI)
         mock_enhanced_app.return_value = mock_app
@@ -261,9 +261,11 @@ class TestAdkBuilder:
             
             result = builder.build_fastapi_app()
             
-            # Verify credential service initialization was attempted
-            # (asyncio.run would be called for initialization)
-            mock_asyncio_run.assert_called_once()
+            # Verify credential service was created and passed properly
+            call_kwargs = mock_enhanced_app.call_args[1]
+            assert 'credential_service' in call_kwargs
+            credential_service = call_kwargs['credential_service']
+            assert credential_service is not None
 
 
 class TestAdkBuilderServiceCreation:
@@ -279,24 +281,19 @@ class TestAdkBuilderServiceCreation:
     def test_create_session_service_instance(self):
         """Test session service creation from instance."""
         session_service = InMemorySessionService()
-        builder = AdkBuilder().with_session_service(session_service)
+        builder = AdkBuilder().with_session_service_instance(session_service)
         
         service = builder._create_session_service()
         assert service is session_service
     
-    @patch.dict(os.environ, {'GOOGLE_CLOUD_PROJECT': 'test-project', 'GOOGLE_CLOUD_LOCATION': 'us-central1'})
-    def test_create_session_service_agentengine_uri(self):
-        """Test session service creation from agent engine URI."""
-        builder = AdkBuilder().with_session_service("agentengine://12345")
+    def test_create_session_service_yaml_uri(self):
+        """Test session service creation from YAML URI."""
+        builder = AdkBuilder().with_session_service("yaml:///path/to/sessions.yaml")
         
-        with patch('google.adk.sessions.vertex_ai_session_service.VertexAiSessionService') as mock_service:
+        with patch('google_adk_extras.sessions.yaml_file_session_service.YamlFileSessionService') as mock_service:
             service = builder._create_session_service()
             
-            mock_service.assert_called_once_with(
-                project="test-project",
-                location="us-central1",
-                agent_engine_id="12345"
-            )
+            mock_service.assert_called_once_with(base_directory="/path/to/sessions.yaml")
     
     def test_create_artifact_service_default(self):
         """Test default artifact service creation."""
@@ -305,14 +302,14 @@ class TestAdkBuilderServiceCreation:
         
         assert isinstance(service, InMemoryArtifactService)
     
-    def test_create_artifact_service_gcs_uri(self):
-        """Test artifact service creation from GCS URI."""
-        builder = AdkBuilder().with_artifact_service("gs://test-bucket")
+    def test_create_artifact_service_local_uri(self):
+        """Test artifact service creation from local URI."""
+        builder = AdkBuilder().with_artifact_service("local:///path/to/artifacts")
         
-        with patch('google.adk.artifacts.gcs_artifact_service.GcsArtifactService') as mock_service:
+        with patch('google_adk_extras.artifacts.local_folder_artifact_service.LocalFolderArtifactService') as mock_service:
             service = builder._create_artifact_service()
             
-            mock_service.assert_called_once_with(bucket_name="test-bucket")
+            mock_service.assert_called_once_with(base_directory="/path/to/artifacts")
     
     def test_create_memory_service_default(self):
         """Test default memory service creation."""
@@ -321,14 +318,11 @@ class TestAdkBuilderServiceCreation:
         
         assert isinstance(service, InMemoryMemoryService)
     
-    @patch.dict(os.environ, {'GOOGLE_CLOUD_PROJECT': 'test-project', 'GOOGLE_CLOUD_LOCATION': 'us-central1'})
-    def test_create_memory_service_rag_uri(self):
-        """Test memory service creation from RAG URI."""
-        builder = AdkBuilder().with_memory_service_uri("rag://test-corpus")
+    def test_create_memory_service_yaml_uri(self):
+        """Test memory service creation from YAML URI."""
+        builder = AdkBuilder().with_memory_service("yaml:///path/to/memory.yaml")
         
-        with patch('google_adk_extras.adk_builder.VertexAiRagMemoryService') as mock_service:
+        with patch('google_adk_extras.memory.yaml_file_memory_service.YamlFileMemoryService') as mock_service:
             service = builder._create_memory_service()
             
-            mock_service.assert_called_once_with(
-                rag_corpus="projects/test-project/locations/us-central1/ragCorpora/test-corpus"
-            )
+            mock_service.assert_called_once_with(base_directory="/path/to/memory.yaml")
