@@ -233,8 +233,12 @@ class SQLMemoryService(BaseCustomMemoryService):
         Raises:
             RuntimeError: If searching memory fails.
         """
-        from google.adk.memory.base_memory_service import SearchMemoryResponse
-        from google.adk.memory.memory_entry import MemoryEntry
+        try:
+            from google.adk.memory.base_memory_service import SearchMemoryResponse
+            from google.adk.memory.memory_entry import MemoryEntry
+        except Exception:  # Fallback when ADK surface differs
+            from types import SimpleNamespace as MemoryEntry  # type: ignore
+            SearchMemoryResponse = None  # type: ignore
         
         db_session = self._get_db_session()
         try:
@@ -268,14 +272,27 @@ class SQLMemoryService(BaseCustomMemoryService):
             memories = []
             for db_memory in db_memories:
                 content = self._deserialize_content(db_memory.content_json)
-                memory_entry = MemoryEntry(
-                    content=content,
-                    author=db_memory.author,
-                    timestamp=db_memory.timestamp.isoformat() if db_memory.timestamp else None
-                )
+                try:
+                    memory_entry = MemoryEntry(
+                        content=content,
+                        author=db_memory.author,
+                        timestamp=db_memory.timestamp.isoformat() if db_memory.timestamp else None
+                    )
+                except TypeError:
+                    # SimpleNamespace fallback
+                    from types import SimpleNamespace
+                    memory_entry = SimpleNamespace(
+                        content=content,
+                        author=db_memory.author,
+                        timestamp=db_memory.timestamp.isoformat() if db_memory.timestamp else None
+                    )
                 memories.append(memory_entry)
-            
-            return SearchMemoryResponse(memories=memories)
+
+            if SearchMemoryResponse is not None:
+                return SearchMemoryResponse(memories=memories)
+            else:
+                from types import SimpleNamespace
+                return SimpleNamespace(memories=memories)
         except SQLAlchemyError as e:
             raise RuntimeError(f"Failed to search memory: {e}")
         finally:

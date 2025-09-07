@@ -201,8 +201,12 @@ class YamlFileMemoryService(BaseCustomMemoryService):
         Raises:
             RuntimeError: If searching memory fails.
         """
-        from google.adk.memory.base_memory_service import SearchMemoryResponse
-        from google.adk.memory.memory_entry import MemoryEntry
+        try:
+            from google.adk.memory.base_memory_service import SearchMemoryResponse
+            from google.adk.memory.memory_entry import MemoryEntry
+        except Exception:
+            from types import SimpleNamespace as MemoryEntry  # type: ignore
+            SearchMemoryResponse = None  # type: ignore
         
         try:
             # Extract search terms from query
@@ -241,14 +245,25 @@ class YamlFileMemoryService(BaseCustomMemoryService):
                 timestamp_str = None
                 if entry.get("timestamp"):
                     timestamp_str = datetime.fromtimestamp(entry["timestamp"]).isoformat()
-                
-                memory_entry = MemoryEntry(
-                    content=content,
-                    author=entry.get("author"),
-                    timestamp=timestamp_str
-                )
+                try:
+                    memory_entry = MemoryEntry(
+                        content=content,
+                        author=entry.get("author"),
+                        timestamp=timestamp_str
+                    )
+                except TypeError:
+                    from types import SimpleNamespace
+                    memory_entry = SimpleNamespace(
+                        content=content,
+                        author=entry.get("author"),
+                        timestamp=timestamp_str
+                    )
                 memories.append(memory_entry)
-            
-            return SearchMemoryResponse(memories=memories)
+
+            if SearchMemoryResponse is not None:
+                return SearchMemoryResponse(memories=memories)
+            else:
+                from types import SimpleNamespace
+                return SimpleNamespace(memories=memories)
         except Exception as e:
             raise RuntimeError(f"Failed to search memory: {e}")

@@ -371,11 +371,15 @@ def get_enhanced_fast_api_app(
             base_path = Path.cwd() / agents_dir
             if base_path.exists() and base_path.is_dir():
                 for p in base_path.iterdir():
-                    if (
-                        p.is_file()
-                        or p.name.startswith((".", "__pycache__"))
-                        or not (p / "agent.json").is_file()
-                    ):
+                    try:
+                        if (
+                            p.is_file()
+                            or p.name.startswith((".", "__pycache__"))
+                            or not (p / "agent.json").is_file()
+                        ):
+                            continue
+                    except PermissionError:
+                        # Skip directories we cannot inspect
                         continue
 
                     app_name = p.name
@@ -406,7 +410,7 @@ def get_enhanced_fast_api_app(
                         logger.error("Failed to setup A2A agent %s: %s", app_name, e)
 
         # 2) Programmatic A2A for registered agents (no agents_dir)
-        if programmatic_a2a and not agents_dir:
+        if programmatic_a2a:
             # Attempt to enumerate agents from the provided loader
             agent_names = []
             if hasattr(final_agent_loader, "list_agents"):

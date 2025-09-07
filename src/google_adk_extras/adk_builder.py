@@ -378,7 +378,10 @@ class AdkBuilder:
             description=description or name,
             agent_card=agent_card_url,
         )
-        return self.with_agent_instance(name, remote)
+        # Do not enforce BaseAgent type here; RemoteA2aAgent should be compatible
+        self._registered_agents[name] = remote
+        logger.info("Registered remote A2A agent: %s", name)
+        return self
 
     def with_host_port(self, host: str = "127.0.0.1", port: int = 8000) -> "AdkBuilder":
         """Configure host and port for the server.

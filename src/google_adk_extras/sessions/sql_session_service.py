@@ -252,8 +252,6 @@ class SQLSessionService(BaseCustomSessionService):
         Raises:
             RuntimeError: If session retrieval fails.
         """
-        from google.adk.sessions.base_session_service import GetSessionConfig
-        
         db_session = self._get_db_session()
         try:
             db_session_model = db_session.query(SQLSessionModel).filter(
@@ -312,8 +310,6 @@ class SQLSessionService(BaseCustomSessionService):
         Raises:
             RuntimeError: If session listing fails.
         """
-        from google.adk.sessions.base_session_service import ListSessionsResponse
-        
         db_session = self._get_db_session()
         try:
             # Retrieve all sessions for user (without events)
@@ -337,7 +333,12 @@ class SQLSessionService(BaseCustomSessionService):
                 )
                 sessions.append(session)
             
-            return ListSessionsResponse(sessions=sessions)
+            try:
+                from google.adk.sessions.base_session_service import ListSessionsResponse
+                return ListSessionsResponse(sessions=sessions)
+            except Exception:
+                from types import SimpleNamespace
+                return SimpleNamespace(sessions=sessions)
         except SQLAlchemyError as e:
             raise RuntimeError(f"Failed to list sessions: {e}")
         finally:

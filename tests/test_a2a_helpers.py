@@ -68,10 +68,7 @@ def _install_adk_a2a_stubs():
         "google.adk.utils.feature_decorator",
         working_in_progress=lambda _: (lambda f: f)
     )
-    _install_stub(
-        "google.adk.cli.adk_web_server",
-        AdkWebServer=type("AdkWebServer", (), {})
-    )
+    # Do not stub google.adk.cli.adk_web_server to avoid clashing with other tests
     _install_stub("google.adk.cli.utils.envs")
     _install_stub("google.adk.cli.utils.evals")
     _install_stub(
@@ -123,9 +120,13 @@ def _install_adk_a2a_stubs():
         "a2a.server.apps",
         A2AStarletteApplication=DummyA2AApp
     )
+    class _Handler:
+        def __init__(self, *, agent_executor, task_store):
+            self.agent_executor = agent_executor
+            self.task_store = task_store
     _install_stub(
         "a2a.server.request_handlers",
-        DefaultRequestHandler=type("DefaultRequestHandler", (), {})
+        DefaultRequestHandler=_Handler
     )
     _install_stub(
         "a2a.server.tasks",
@@ -139,9 +140,12 @@ def _install_adk_a2a_stubs():
         "a2a.utils.constants",
         AGENT_CARD_WELL_KNOWN_PATH="/.well-known/agent.json"
     )
+    class _Exec:
+        def __init__(self, *, runner):
+            self.runner = runner
     _install_stub(
         "google.adk.a2a.executor.a2a_agent_executor",
-        A2aAgentExecutor=type("A2aAgentExecutor", (), {})
+        A2aAgentExecutor=_Exec,
     )
 
 
