@@ -30,27 +30,32 @@ plugins:
   - search
   - llmstxt:
       markdown_description: |
-        Production-ready services, credential flows (OAuth2/JWT/Basic), and FastAPI wiring for Google ADK.
-        Durable backends for sessions, artifacts, and memory with simple URI config and a fluent builder.
+        google-adk-extras adds production-grade pieces around Google ADK so you can ship.
+        
+        It provides:
+        - Durable backends for sessions, artifacts, and memory (SQL, MongoDB, Redis, YAML, S3).
+        - Practical credential flows (OAuth2 for Google/GitHub/Microsoft/X, JWT, Basic Auth).
+        - A clean FastAPI server with agent hot-reload and A2A support.
+        - A fluent builder to assemble apps quickly via URIs or service instances.
       full_output: llms-full.txt
       sections:
-        Overview:
-        - index.md: Overview & value proposition
-        Getting Started:
-        - getting-started.md
+        Overview & Value:
+        - index.md: What this package is and when to use it
         Quickstarts:
-        - quickstarts.md
-        FastAPI Integration:
-        - fastapi.md
-        Services:
-        - services.md: Durable services backends
-        - credentials.md: Credential services (OAuth2/JWT/Basic)
+        - getting-started.md: Install, minimal app, and common URIs
+        - quickstarts.md: A few end-to-end snippets to copy/paste
+        FastAPI & A2A:
+        - fastapi.md: Build a FastAPI app with AdkBuilder and enable A2A
+        Durable Services:
+        - services.md: Sessions, artifacts, memory backends and trade-offs
+        Credentials:
+        - credentials.md: OAuth2 (Google/GitHub/Microsoft/X), JWT, Basic Auth
         Programmatic Agents:
-        - agent-loading.md
-        URIs & Configuration:
-        - uris.md
-        Examples:
-        - examples.md
+        - agent-loading.md: Custom loaders and in-memory registrations
+        Configuration:
+        - uris.md: Supported URIs and parsing rules
+        Examples & Tips:
+        - examples.md: Small, practical examples
         Troubleshooting:
-        - troubleshooting.md
+        - troubleshooting.md: Fix common integration issues fast
 docs_dir: docs
