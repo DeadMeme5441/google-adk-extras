@@ -3,6 +3,8 @@
 [![CI](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/ci.yml/badge.svg)](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/ci.yml)
 [![PyPI version](https://badge.fury.io/py/google-adk-extras.svg)](https://badge.fury.io/py/google-adk-extras)
 
+[Documentation](https://DeadMeme5441.github.io/google-adk-extras/) · [Examples](examples/)
+
 A comprehensive extension library for Google ADK that provides production-ready implementations of custom services, enhanced runners, and a flexible configuration system.
 
 ## Overview

@@ -13,4 +13,12 @@ This repository includes runnable examples under `examples/`:
 - Builder & FastAPI: `examples/adk_builder_example.py`, `examples/google_adk_integration.py`
 - Dynamic chatbot & agent instances: `examples/dynamic_chatbot_example.py`, `examples/agent_instances_example.py`
 
+Quick run
+
+```bash
+uv run python examples/adk_builder_example.py
+```
+
 Each script includes minimal setup; install the relevant extra and run with Python 3.12+.
+
+See `examples/README.md` for detailed prerequisites and provider setup for OAuth flows.

@@ -14,8 +14,8 @@ app = (
   AdkBuilder()
   .with_agents_dir("./agents")
   .with_session_service("sqlite:///sessions.db")
-  .with_artifact_service("local://./artifacts")
-  .with_memory_service("yaml://./memory")
+  .with_artifact_service("local://./artifacts")   # or gs://, s3://, sql://, mongodb://
+  .with_memory_service("yaml://./memory")        # or redis://, sqlite:///..., mongodb://
   .with_credential_service(GoogleOAuth2CredentialService(
       client_id="...", client_secret="...", scopes=["openid", "email"]
   ))
@@ -29,4 +29,5 @@ Notes
 
 - URIs vs instances: use URIs for simple wiring, or pass pre‑built instances for advanced control.
 - Programmatic agent insertion: `with_agent_instance(name, agent)` or `with_agents({..})`.
-
+- Credential URI shortcuts: `with_credential_service_uri("oauth2-google://...@scopes=openid,email")`, `jwt://secret@issuer=...&audience=...`, `basic-auth://user:pass@realm=API`.
+- Build a Runner directly with `build_runner("agent_name")` if you don’t need FastAPI.

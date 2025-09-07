@@ -24,9 +24,32 @@ Example:
 max_llm_calls: 200
 tool_timeouts:
   function_tools: 10.0
+  openapi_tools: 60.0
 retry_policies:
   default:
     max_attempts: 3
+    strategy: exponential_backoff
+    base_delay: 0.5
+enable_circuit_breaker: true
+debug:
+  enabled: true
+  trace_agent_flow: true
+```
+
+Advanced (A2A + circuit breaker)
+
+```yaml
+a2a_config:
+  request_timeout: 15.0
+  retry_config:
+    max_attempts: 2
+    strategy: fixed_delay
+    base_delay: 0.2
+enable_circuit_breaker: true
+circuit_breaker_config:
+  failure_threshold: 3
+  recovery_timeout: 10.0
+  success_threshold: 2
 debug:
   enabled: true
 ```
@@ -43,4 +66,3 @@ Common fields:
 Tool registry extras:
 
 - `strategy_fallback_chain`, `default_timeout`, `max_concurrent_executions`
-
