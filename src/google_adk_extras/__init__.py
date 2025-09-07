@@ -28,4 +28,4 @@ __all__ = [
     "CustomAgentLoader",
 ]
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
