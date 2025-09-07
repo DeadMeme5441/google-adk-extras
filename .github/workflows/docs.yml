@@ -39,8 +39,11 @@ jobs:
       - name: Build site (mkdocs)
         run: |
           uv run mkdocs build --site-dir site
+          uv pip install --system mkdocs-material mkdocstrings[python] mkdocs-llmstxt
 
       - name: Upload artifact
+          uv pip install --system -e .
+          uv pip install --system fastapi click watchdog opentelemetry-sdk
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
