@@ -99,7 +99,7 @@ class EnvironmentInterpolator:
         ),
         InterpolationSyntax.PYTHON: InterpolationPattern(
             syntax=InterpolationSyntax.PYTHON,
-            regex=re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*?)(?::([^}]*))?\}'),
+            regex=re.compile(r'(?<!\$|#)\{([A-Za-z_][A-Za-z0-9_]*?)(?::([^}]*))?\}'),
             group_names=['var_name', 'default_value'],
             supports_defaults=True,
             example='{DATABASE_URL:postgresql://localhost/db}'
@@ -248,7 +248,9 @@ class EnvironmentInterpolator:
         def replace_match(match) -> str:
             groups = match.groups()
             var_name = groups[0] if groups else ""
-            default_value = groups[1] if len(groups) > 1 and groups[1] is not None else ""
+            # Check if default value was provided (including empty string)
+            has_default = len(groups) > 1 and groups[1] is not None
+            default_value = groups[1] if has_default else None
             
             # Apply prefix filter if configured
             if (self.config.prefix_filter and 
@@ -256,7 +258,7 @@ class EnvironmentInterpolator:
                 return match.group(0)  # Return original match
             
             # Get environment variable value
-            env_value = self._get_env_value(var_name, default_value, path, validation_issues)
+            env_value = self._get_env_value(var_name, default_value, has_default, path, validation_issues)
             
             return env_value
         
@@ -265,7 +267,8 @@ class EnvironmentInterpolator:
     def _get_env_value(
         self,
         var_name: str,
-        default_value: str,
+        default_value: Optional[str],
+        has_default: bool,
         path: str,
         validation_issues: List[ValidationIssue]
     ) -> str:
@@ -273,7 +276,8 @@ class EnvironmentInterpolator:
         
         Args:
             var_name: Environment variable name
-            default_value: Default value if variable is not set
+            default_value: Default value if variable is not set (can be None or empty string)
+            has_default: Whether a default value was explicitly provided
             path: Configuration path for error reporting
             validation_issues: List to append validation issues to
             
@@ -295,8 +299,8 @@ class EnvironmentInterpolator:
         if env_value is not None:
             return env_value
         
-        # Variable not found
-        if default_value:
+        # Variable not found - check if default was explicitly provided
+        if has_default:
             if self.config.validation_enabled:
                 validation_issues.append(ValidationIssue(
                     path=path,
@@ -304,7 +308,7 @@ class EnvironmentInterpolator:
                     message=f"Environment variable '{var_name}' not found, using default value",
                     suggestion=f"Consider setting {var_name} environment variable"
                 ))
-            return default_value
+            return default_value or ""  # Return empty string if default_value is None
         
         if self.config.allow_undefined:
             if self.config.validation_enabled:

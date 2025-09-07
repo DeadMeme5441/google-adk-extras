@@ -160,7 +160,7 @@ streaming_mode = "NONE"
             'APP_DATABASE__HOST': 'localhost',
             'APP_DATABASE__PORT': '5432',
             'APP_MAX_LLM_CALLS': '75',
-            'APP_DEBUG': 'true'
+            'APP_DEBUG__ENABLED': 'true'
         })
         
         system = ConfigurationSystem()

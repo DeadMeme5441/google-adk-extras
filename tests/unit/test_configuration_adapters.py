@@ -110,10 +110,12 @@ class TestYAMLConfigAdapter:
         assert yaml_adapter.can_handle_source({"key": "value"}) == False
     
     @patch('builtins.open', mock_open(read_data='key: value\nport: 8080'))
-    @patch('google_adk_extras.configuration.adapters.yaml.safe_load')
-    def test_load_from_yaml_file(self, mock_yaml_load, yaml_adapter, temp_dir):
+    @patch('pathlib.Path.exists')
+    @patch('yaml.safe_load')
+    def test_load_from_yaml_file(self, mock_yaml_load, mock_exists, yaml_adapter, temp_dir):
         """Test loading from YAML file."""
         mock_yaml_load.return_value = {'key': 'value', 'port': 8080}
+        mock_exists.return_value = True
         
         yaml_file = temp_dir / "config.yaml"
         context = ConfigurationContext(source_type=ConfigSourceType.YAML_FILE)
@@ -123,7 +125,7 @@ class TestYAMLConfigAdapter:
         assert result == {'key': 'value', 'port': 8080}
         assert context.source_path is not None
     
-    @patch('google_adk_extras.configuration.adapters.yaml.safe_load')
+    @patch('yaml.safe_load')
     def test_load_from_yaml_string(self, mock_yaml_load, yaml_adapter):
         """Test loading from YAML string content."""
         mock_yaml_load.return_value = {'key': 'value'}
@@ -135,7 +137,7 @@ class TestYAMLConfigAdapter:
         
         assert result == {'key': 'value'}
     
-    @patch('google_adk_extras.configuration.adapters.yaml.safe_load')
+    @patch('yaml.safe_load')
     def test_yaml_parse_error(self, mock_yaml_load, yaml_adapter):
         """Test YAML parsing error handling."""
         import yaml
@@ -148,7 +150,7 @@ class TestYAMLConfigAdapter:
     
     def test_yaml_import_error(self):
         """Test YAML adapter when PyYAML is not available."""
-        with patch('google_adk_extras.configuration.adapters.yaml', None):
+        with patch('builtins.__import__', side_effect=ImportError("No module named 'yaml'")):
             with patch.dict('sys.modules', {'yaml': None}):
                 adapter = YAMLConfigAdapter(target_type=MockConfig)
                 context = ConfigurationContext(source_type=ConfigSourceType.YAML_FILE)
@@ -170,8 +172,11 @@ class TestYAMLConfigAdapter:
     
     def test_create_target_config_error(self, yaml_adapter):
         """Test target config creation error handling."""
-        # Mock target type that raises exception
-        yaml_adapter.target_type = Mock(side_effect=Exception("Creation failed"))
+        # Mock target type that raises exception on from_yaml_dict
+        mock_target = Mock()
+        mock_target.__name__ = 'MockTargetType'
+        mock_target.from_yaml_dict.side_effect = Exception("Creation failed")
+        yaml_adapter.target_type = mock_target
         
         raw_config = {'key': 'value'}
         context = ConfigurationContext(source_type=ConfigSourceType.YAML_FILE)
@@ -206,8 +211,11 @@ class TestJSONConfigAdapter:
         assert json_adapter.can_handle_source({"key": "value"}) == False
     
     @patch('builtins.open', mock_open(read_data='{"key": "value", "port": 8080}'))
-    def test_load_from_json_file(self, json_adapter, temp_dir):
+    @patch('pathlib.Path.exists')
+    def test_load_from_json_file(self, mock_exists, json_adapter, temp_dir):
         """Test loading from JSON file."""
+        mock_exists.return_value = True
+        
         json_file = temp_dir / "config.json"
         context = ConfigurationContext(source_type=ConfigSourceType.JSON_FILE)
         
@@ -273,11 +281,13 @@ class TestTOMLConfigAdapter:
         assert toml_adapter.can_handle_source("config.yaml") == False
         assert toml_adapter.can_handle_source({"key": "value"}) == False
     
-    @patch('google_adk_extras.configuration.adapters.tomli.load')
     @patch('builtins.open', mock_open())
-    def test_load_from_toml_file(self, mock_open_file, mock_tomli_load, toml_adapter, temp_dir):
+    @patch('pathlib.Path.exists')
+    @patch('tomli.load')
+    def test_load_from_toml_file(self, mock_tomli_load, mock_exists, toml_adapter, temp_dir):
         """Test loading from TOML file."""
         mock_tomli_load.return_value = {'app': {'name': 'test', 'version': '1.0'}}
+        mock_exists.return_value = True
         
         toml_file = temp_dir / "config.toml"
         context = ConfigurationContext(source_type=ConfigSourceType.TOML_FILE)
@@ -287,7 +297,7 @@ class TestTOMLConfigAdapter:
         assert result == {'app': {'name': 'test', 'version': '1.0'}}
         assert context.source_path is not None
     
-    @patch('google_adk_extras.configuration.adapters.tomli.loads')
+    @patch('tomli.loads')
     def test_load_from_toml_string(self, mock_tomli_loads, toml_adapter):
         """Test loading from TOML string."""
         mock_tomli_loads.return_value = {'key': 'value'}
@@ -511,7 +521,7 @@ class TestRemoteConfigAdapter:
         assert remote_adapter.can_handle_source("config.yaml") == False
         assert remote_adapter.can_handle_source({"key": "value"}) == False
     
-    @patch('google_adk_extras.configuration.adapters.urlopen')
+    @patch('urllib.request.urlopen')
     def test_load_json_from_remote(self, mock_urlopen, remote_adapter):
         """Test loading JSON from remote URL."""
         mock_response = Mock()
@@ -527,8 +537,8 @@ class TestRemoteConfigAdapter:
         assert result == {'key': 'value', 'number': 42}
         assert context.source_path == url
     
-    @patch('google_adk_extras.configuration.adapters.urlopen')
-    @patch('google_adk_extras.configuration.adapters.yaml.safe_load')
+    @patch('urllib.request.urlopen')
+    @patch('yaml.safe_load')
     def test_load_yaml_from_remote(self, mock_yaml_load, mock_urlopen, remote_adapter):
         """Test loading YAML from remote URL."""
         mock_yaml_load.return_value = {'service': 'api', 'port': 8080}
@@ -544,7 +554,7 @@ class TestRemoteConfigAdapter:
         
         assert result == {'service': 'api', 'port': 8080}
     
-    @patch('google_adk_extras.configuration.adapters.urlopen')
+    @patch('urllib.request.urlopen')
     def test_remote_request_with_headers(self, mock_urlopen, remote_adapter):
         """Test remote request with custom headers."""
         remote_adapter.headers = {'Authorization': 'Bearer token123'}
@@ -564,7 +574,7 @@ class TestRemoteConfigAdapter:
         request = call_args[0]
         assert 'Authorization' in request.headers
     
-    @patch('google_adk_extras.configuration.adapters.urlopen')
+    @patch('urllib.request.urlopen')
     def test_remote_load_error(self, mock_urlopen, remote_adapter):
         """Test remote loading error handling."""
         mock_urlopen.side_effect = Exception("Connection failed")
@@ -575,7 +585,7 @@ class TestRemoteConfigAdapter:
         with pytest.raises(ConfigurationError):
             remote_adapter._load_raw_config(url, context)
     
-    @patch('google_adk_extras.configuration.adapters.urlopen')
+    @patch('urllib.request.urlopen')
     def test_unknown_format_detection(self, mock_urlopen, remote_adapter):
         """Test automatic format detection."""
         # JSON content without explicit content type
@@ -640,8 +650,12 @@ class TestAdapterErrorHandling:
     
     def test_validation_issues_collection(self):
         """Test that validation issues are properly collected."""
-        adapter = DictConfigAdapter(target_type=Mock)
-        adapter.target_type.side_effect = Exception("Creation failed")
+        # Create a mock target type that raises exception
+        mock_target = Mock()
+        mock_target.__name__ = 'MockTargetType'
+        mock_target.from_dict.side_effect = Exception("Creation failed")
+        
+        adapter = DictConfigAdapter(target_type=mock_target)
         
         raw_config = {'key': 'value'}
         context = ConfigurationContext(source_type=ConfigSourceType.DICT)

@@ -14,7 +14,8 @@ from google_adk_extras.runners.registry.tool_registry import (
     EnhancedToolRegistry,
     ToolType,
     ToolHealthStatus,
-    ToolRegistrationEvent
+    ToolRegistrationEvent,
+    ToolInfo
 )
 from google_adk_extras.runners.registry.config import ToolRegistryConfig
 from google_adk_extras.runners.errors import YamlSystemContext
@@ -116,10 +117,11 @@ class TestEnhancedToolRegistryIntegration:
         # Register Google Tool
         mock_google_tool = Mock()
         mock_google_tool.name = "google_tool"
+        mock_google_tool.__class__.__name__ = "GoogleTool"
         mock_google_tool._credentials_manager = Mock()
         
-        with patch('isinstance') as mock_isinstance:
-            mock_isinstance.side_effect = lambda obj, cls: cls.__name__ == "GoogleTool"
+        # Mock metadata extraction
+        with patch.object(registry, '_extract_google_tool_metadata', return_value={"has_credentials": True}):
             google_result = await registry.register_google_tool(
                 "google_tool", mock_google_tool, validate_credentials=False
             )
@@ -139,10 +141,11 @@ class TestEnhancedToolRegistryIntegration:
         assert tool_types[ToolType.AGENT] == 1
         assert tool_types[ToolType.GOOGLE] == 1
         
-        # Verify events were emitted
-        assert len(events) == 5  # One for each registration
-        for event in events:
-            assert isinstance(event, ToolRegistrationEvent)
+        # Verify events were emitted (registration + health events)
+        assert len(events) >= 5  # At least one for each registration
+        registration_events = [e for e in events if isinstance(e, ToolRegistrationEvent)]
+        assert len(registration_events) == 5  # One registration event per tool
+        for event in registration_events:
             assert event.event_type == RegistryEventType.REGISTERED
 
     @pytest.mark.asyncio
@@ -328,7 +331,7 @@ class TestEnhancedToolRegistryIntegration:
         for tool_name, tool_type, health_status in tools_data:
             mock_tool = Mock()
             mock_tool.name = tool_name
-            tool_info = registry.ToolInfo(tool_name, mock_tool, tool_type)
+            tool_info = ToolInfo(tool_name, mock_tool, tool_type)
             tool_info.health_status = health_status
             registry._registered_tools[tool_name] = tool_info
         
@@ -476,15 +479,16 @@ class TestEnhancedToolRegistryIntegration:
         for name, tool_type in tool_configs:
             mock_tool = Mock()
             mock_tool.name = name
-            tool_info = registry.ToolInfo(name, mock_tool, tool_type)
+            tool_info = ToolInfo(name, mock_tool, tool_type)
             
             # Simulate some usage and errors
-            if "func" in name:
+            if name == "func1":
                 tool_info.usage_count = 10
                 tool_info.error_count = 1
-            elif "mcp" in name:
+            elif name == "mcp1":
                 tool_info.usage_count = 5
                 tool_info.error_count = 2
+            # Others default to usage_count=0, error_count=0
             
             registry._registered_tools[name] = tool_info
         
@@ -590,19 +594,20 @@ class TestEnhancedToolRegistryIntegration:
             # Unregistration event
             registry.unregister_tool("event_test_tool")
         
-        # Verify events
-        assert len(events) >= 3
+        # Verify events - filter to ToolRegistrationEvent only
+        tool_events = [e for e in events if isinstance(e, ToolRegistrationEvent)]
+        assert len(tool_events) >= 3
         
-        registration_events = [e for e in events if e.event_type == RegistryEventType.REGISTERED]
-        update_events = [e for e in events if e.event_type == RegistryEventType.UPDATED]
-        unregistration_events = [e for e in events if e.event_type == RegistryEventType.UNREGISTERED]
+        registration_events = [e for e in tool_events if e.event_type == RegistryEventType.REGISTERED]
+        update_events = [e for e in tool_events if e.event_type == RegistryEventType.UPDATED]
+        unregistration_events = [e for e in tool_events if e.event_type == RegistryEventType.UNREGISTERED]
         
         assert len(registration_events) >= 1
         assert len(update_events) >= 1
         assert len(unregistration_events) >= 1
         
         # Verify event data
-        for event in events:
+        for event in tool_events:
             assert isinstance(event, ToolRegistrationEvent)
             assert event.registry_name == "integration_test_registry"
             assert event.item_name == "event_test_tool"

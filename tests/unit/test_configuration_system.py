@@ -194,18 +194,21 @@ class TestConfigurationSystem:
         with pytest.raises(ConfigurationError):
             config_system.load_config(MockConfig, source, adapter_name="nonexistent")
     
-    def test_load_config_adapter_error(self, config_system):
+    def test_load_config_adapter_error(self):
         """Test loading when adapter raises error."""
+        # Create strict config system that raises errors
+        strict_system = ConfigurationSystem(default_adapters=False, strict_mode=True)
+        
         # Create adapter that raises error
         error_adapter = MockAdapter(target_type=MockConfig)
         error_adapter.create_error = Exception("Adapter failed")
         
-        config_system.register_adapter("error", lambda **kwargs: error_adapter)
+        strict_system.register_adapter("error", lambda **kwargs: error_adapter)
         
         source = {'key': 'value'}
         
         with pytest.raises(ConfigurationError):
-            config_system.load_config(MockConfig, source, adapter_name="error")
+            strict_system.load_config(MockConfig, source, adapter_name="error")
     
     def test_adapter_instance_caching(self, config_system):
         """Test adapter instance caching."""
@@ -322,14 +325,23 @@ class TestGlobalConfigSystem:
     
     def test_get_config_system_with_settings(self):
         """Test global config system with custom settings."""
-        system = get_config_system(
+        # First call with defaults
+        system1 = get_config_system()
+        
+        # Second call with custom settings should return same instance with original settings
+        system2 = get_config_system(
             enable_interpolation=False,
             enable_validation=False,
             strict_mode=True
         )
         
-        # Settings only applied on first call
-        assert system.enable_interpolation == True  # Default from first call
+        # Should be the same instance
+        assert system1 is system2
+        
+        # Settings only applied on first call - should still have defaults
+        assert system2.enable_interpolation == True  # Default from first call
+        assert system2.enable_validation == True  # Default from first call
+        assert system2.strict_mode == False  # Default from first call
     
     def test_reset_config_system(self):
         """Test resetting global config system."""
@@ -346,7 +358,7 @@ class TestGlobalConfigSystem:
         assert isinstance(result, AdapterResult)
         assert result.config.name == 'convenience_test'
     
-    @patch('google_adk_extras.configuration.system.EnhancedRunConfig')
+    @patch('google_adk_extras.runners.config.EnhancedRunConfig')
     def test_load_enhanced_run_config_convenience(self, mock_enhanced_config):
         """Test load_enhanced_run_config convenience function."""
         mock_config_instance = Mock()
