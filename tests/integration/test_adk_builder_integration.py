@@ -170,17 +170,23 @@ tools: []
     def test_build_app_with_multiple_configurations(self):
         """Test building FastAPI app with multiple configuration options."""
         db_path = os.path.join(self.temp_dir, "test.db")
-        
+
         builder = AdkBuilder()
-        app = (builder
-               .with_agents_dir(self.agents_dir)
-               .with_session_service(f"sqlite:///{db_path}")
-               .with_credential_service_uri("jwt://multi-secret@algorithm=HS256&issuer=multi-app")
-               .with_cors(["http://localhost:3000"])
-               .with_web_ui(True)
-               .with_a2a_protocol(False)
-               .with_host_port("127.0.0.1", 8001)
-               .build_fastapi_app())
+        builder = (builder
+                   .with_agents_dir(self.agents_dir)
+                   .with_session_service(f"sqlite:///{db_path}")
+                   .with_cors(["http://localhost:3000"])
+                   .with_web_ui(True)
+                   .with_a2a_protocol(False)
+                   .with_host_port("127.0.0.1", 8001))
+
+        # Use JWT if available, otherwise fall back to Basic Auth to avoid requiring extras
+        if _HAVE_JWT:
+            builder = builder.with_credential_service_uri("jwt://multi-secret@algorithm=HS256&issuer=multi-app")
+        else:
+            builder = builder.with_credential_service_uri("basic-auth://user:pass")
+
+        app = builder.build_fastapi_app()
         
         assert isinstance(app, FastAPI)
         
