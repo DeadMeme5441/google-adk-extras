@@ -29,7 +29,6 @@ plugins:
           options:
             show_source: false
             docstring_style: google
-  - mermaid2
 
 markdown_extensions:
   - admonition
@@ -38,11 +37,17 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
   - pymdownx.details
   - pymdownx.tabbed
   - pymdownx.emoji
   - pymdownx.tasklist
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
 
 nav:
   - Home: index.md
