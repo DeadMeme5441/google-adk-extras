@@ -4,12 +4,12 @@ title: Registries
 
 # Registries
 
-Agent and Tool registries provide hot‑swapping, dynamic loading, health monitoring, caching, and events.
+Agent and Tool registries provide hot‑swapping, dynamic loading, health monitoring, caching, and events. Use them for long‑running processes where you need to update logic without restarts.
 
 ## Agent Registry
 
-- Extends `CustomAgentLoader` with events/health/caching
-- Hot‑swap agents with validation
+- Extends loader behavior with events/health/caching
+- Hot‑swap agents with validation and graceful handoff
 
 ```python
 from google_adk_extras.runners.registry import EnhancedAgentRegistry
@@ -21,8 +21,8 @@ assert "chat" in areg.list_agents()
 
 ## Tool Registry
 
-- Registers tools and toolsets; integrates with strategies
-- Tracks usage, errors, health; supports auth detection
+- Registers tools and toolsets; integrates with strategy manager
+- Tracks usage, errors, and health; supports auth detection and fallbacks
 
 ```python
 from google_adk_extras.runners.registry import EnhancedToolRegistry
@@ -37,5 +37,10 @@ await treg.register_function_tool("hello", hello_tool)
 
 ## Configuration
 
-Pydantic models for registry behavior (caching, health intervals, fallback strategies). See Configuration Reference for fields and defaults.
+Pydantic models expose:
 
+- `caching`: enabled, default TTL, cleanup interval
+- `health_monitoring`: enabled, check interval, failure/recovery thresholds
+- `events`: delivery mode, listener limits
+
+Tune health intervals for your environment. High‑frequency checks add overhead.

@@ -13,6 +13,13 @@ from google_adk_extras.sessions import SQLSessionService
 svc = SQLSessionService("sqlite:///sessions.db")
 await svc.initialize()
 session = await svc.create_session(app_name="my_app", user_id="u1")
+
+# Append and fetch events
+from google.genai import types
+await svc.append_event(app_name="my_app", user_id="u1", session_id=session.id,
+                       event=types.Event(author="system", content=types.Content(parts=[types.Part(text="hello")])) )
+fetched = await svc.get_session(app_name="my_app", user_id="u1", session_id=session.id)
+print(len(fetched.events))
 ```
 
 ## Redis
@@ -44,4 +51,4 @@ Tips
 - Always `await initialize()` once per process.
 - For SQL, prefer pooled engines in production databases.
 - Use `GetSessionConfig` to filter events on read if needed.
-
+- YAML/Local are best for dev; migrate to SQL/Redis/Mongo for production.

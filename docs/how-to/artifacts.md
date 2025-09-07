@@ -18,6 +18,9 @@ await svc.initialize()
 part = types.Part(inline_data=types.Blob(data=b"hello", mime_type="text/plain"))
 v = await svc.save_artifact(app_name="my_app", user_id="u1", session_id="s1", filename="greeting", artifact=part)
 loaded = await svc.load_artifact(app_name="my_app", user_id="u1", session_id="s1", filename="greeting", version=v)
+
+# List versions for rollback
+versions = await svc.list_versions(app_name="my_app", user_id="u1", session_id="s1", filename="greeting")
 ```
 
 ## S3
@@ -34,4 +37,4 @@ Tips
 
 - Local is great for dev; use S3/SQL/Mongo in production.
 - Use `list_versions` to implement rollback flows.
-
+- Avoid large blobs in session state; persist to artifacts and store references.

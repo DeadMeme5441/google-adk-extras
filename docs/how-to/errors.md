@@ -22,11 +22,26 @@ ctx = YamlSystemContext(system_name="my_system", current_agent="root")
 try:
     raise YamlSystemError("Something failed", context=ctx)
 except YamlSystemError as e:
-    print(e.get_debug_info())
+    info = e.get_debug_info()
+    print(info)
+
+Surfacing errors from strategies
+
+```python
+from google_adk_extras.runners.strategies import ToolExecutionStrategyManager
+from google_adk_extras.runners.errors import ToolExecutionError
+
+mgr = ToolExecutionStrategyManager()
+try:
+    await mgr.execute_tool(tool, context, ctx)
+except ToolExecutionError as e:
+    # include suggested fixes and tool type
+    print(e.error_code, e.suggested_fixes)
+```
 ```
 
 Tips
 
 - Prefer raising these errors in extensions for consistent UX.
 - Log `get_debug_info()` in debug builds for rich context.
-
+- Include `YamlSystemContext` (system, agent, tool, session, user) to accelerate ops triage.
