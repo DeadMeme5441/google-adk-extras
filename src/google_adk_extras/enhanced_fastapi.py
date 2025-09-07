@@ -16,8 +16,6 @@ from fastapi import FastAPI
 from fastapi import UploadFile
 from fastapi.responses import FileResponse
 from fastapi.responses import PlainTextResponse
-from opentelemetry.sdk.trace import export
-from opentelemetry.sdk.trace import TracerProvider
 from starlette.types import Lifespan
 from watchdog.observers import Observer
 
@@ -36,9 +34,6 @@ from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.utils.feature_decorator import working_in_progress
 from google.adk.cli.adk_web_server import AdkWebServer
 from .enhanced_adk_web_server import EnhancedAdkWebServer
-from .runners.config import EnhancedRunConfig
-from .runners.errors import YamlSystemContext
-from .runners.strategies import ToolExecutionStrategyManager
 from google.adk.cli.utils import envs
 from google.adk.cli.utils import evals
 from google.adk.cli.utils.agent_change_handler import AgentChangeEventHandler
@@ -56,7 +51,7 @@ def get_enhanced_fast_api_app(
     session_db_kwargs: Optional[Mapping[str, Any]] = None,
     artifact_service_uri: Optional[str] = None,
     memory_service_uri: Optional[str] = None,
-    credential_service: Optional[BaseCredentialService] = None,  # NEW: Support custom credential service
+    credential_service: Optional[BaseCredentialService] = None,  # Optional credential service
     eval_storage_uri: Optional[str] = None,
     allow_origins: Optional[List[str]] = None,
     web: bool = True,
@@ -66,10 +61,6 @@ def get_enhanced_fast_api_app(
     trace_to_cloud: bool = False,
     reload_agents: bool = False,
     lifespan: Optional[Lifespan[FastAPI]] = None,
-    # Enhanced Runner features (NEW)
-    enhanced_config: Optional[EnhancedRunConfig] = None,
-    yaml_context: Optional[YamlSystemContext] = None,
-    tool_strategy_manager: Optional[ToolExecutionStrategyManager] = None,
 ) -> FastAPI:
     """Enhanced version of Google ADK's get_fast_api_app with EnhancedRunner integration.
     
@@ -98,9 +89,7 @@ def get_enhanced_fast_api_app(
         trace_to_cloud: Whether to enable cloud tracing.
         reload_agents: Whether to enable hot reloading.
         lifespan: FastAPI lifespan callable.
-        enhanced_config: Enhanced runner configuration with tool timeouts, retries, etc.
-        yaml_context: YAML system context for error handling and debugging.
-        tool_strategy_manager: Manager for tool execution strategies (MCP, OpenAPI, etc.).
+        (Enhanced runner options removed for simplified scope.)
         
     Returns:
         FastAPI: Configured FastAPI application.
@@ -221,13 +210,10 @@ def get_enhanced_fast_api_app(
     else:
         artifact_service = InMemoryArtifactService()
 
-    # Build the Credential service - ENHANCED VERSION
-    if credential_service is None:
-        credential_service_instance = InMemoryCredentialService()
-        logger.info("Using default InMemoryCredentialService")
-    else:
-        credential_service_instance = credential_service
-        logger.info(f"Using provided credential service: {type(credential_service).__name__}")
+    # Credential service is optional; EnhancedAdkWebServer will default if needed
+    credential_service_instance = credential_service
+    if credential_service_instance is None:
+        logger.info("No credential service provided; server will use its default")
 
     # Use configured agent loader (enhanced from ADK)
 
@@ -242,32 +228,16 @@ def get_enhanced_fast_api_app(
         eval_sets_manager=eval_sets_manager,
         eval_set_results_manager=eval_set_results_manager,
         agents_dir=agents_dir,
-        # Enhanced features
-        enhanced_config=enhanced_config,
-        yaml_context=yaml_context,
-        tool_strategy_manager=tool_strategy_manager,
     )
 
     # Callbacks & other optional args for FastAPI instance (same as ADK)
     extra_fast_api_args = {}
 
     if trace_to_cloud:
-        from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-
-        def register_processors(provider: TracerProvider) -> None:
-            envs.load_dotenv_for_agent("", agents_dir)
-            if project_id := os.environ.get("GOOGLE_CLOUD_PROJECT", None):
-                processor = export.BatchSpanProcessor(
-                    CloudTraceSpanExporter(project_id=project_id)
-                )
-                provider.add_span_processor(processor)
-            else:
-                logger.warning(
-                    "GOOGLE_CLOUD_PROJECT environment variable is not set. Tracing will"
-                    " not be enabled."
-                )
-
-        extra_fast_api_args.update(register_processors=register_processors)
+        logger.warning(
+            "trace_to_cloud requested but OpenTelemetry exporters are not bundled. "
+            "Tracing is disabled."
+        )
 
     if reload_agents:
         def setup_observer(observer: Observer, adk_web_server: AdkWebServer):

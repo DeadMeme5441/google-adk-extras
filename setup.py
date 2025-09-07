@@ -1,28 +1,34 @@
 from setuptools import setup, find_packages
 import os
+import re
 
-# Read the contents of README.md
-this_directory = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
+ROOT = os.path.abspath(os.path.dirname(__file__))
 
-# Read version from pyproject.toml
-with open(os.path.join(this_directory, 'pyproject.toml'), encoding='utf-8') as f:
-    import re
-    content = f.read()
-    version_match = re.search(r'version = "([^"]+)"', content)
-    version = version_match.group(1) if version_match else '0.1.1'
-    
-    description_match = re.search(r'description = "([^"]+)"', content)
-    description = description_match.group(1) if description_match else 'Custom implementations of Google ADK services'
+
+def read(fname: str) -> str:
+    with open(os.path.join(ROOT, fname), encoding="utf-8") as f:
+        return f.read()
+
+
+def meta_from_pyproject():
+    content = read("pyproject.toml")
+    version = re.search(r'\nversion\s*=\s*"([^"]+)"', content)
+    desc = re.search(r'\ndescription\s*=\s*"([^"]+)"', content)
+    return (
+        version.group(1) if version else "0.1.5",
+        desc.group(1) if desc else "Production-ready services and FastAPI wiring for Google ADK",
+    )
+
+
+version, description = meta_from_pyproject()
 
 setup(
     name="google-adk-extras",
     version=version,
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="DeadMeme5441",
+    author_email="deadunderscorememe@gmail.com",
     description=description,
-    long_description=long_description,
+    long_description=read("README.md"),
     long_description_content_type="text/markdown",
     url="https://github.com/DeadMeme5441/google-adk-extras",
     packages=find_packages(where="src", include=["google_adk_extras", "google_adk_extras.*"]),
@@ -33,26 +39,31 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.12",
+    python_requires=">=3.10,<3.13",
     install_requires=[
-        "google-genai>=1.0.0",
-        "sqlalchemy>=2.0.0",
-        "pymongo>=4.0.0",
-        "redis>=4.0.0",
-        "pyyaml>=6.0.0",
-        "typing-extensions>=4.0.0",
+        "google-adk",
+        "google-genai",
     ],
     extras_require={
-        "dev": [
-            "pytest>=6.0",
-            "pytest-asyncio>=0.15.0",
-            "build>=0.10.0",
-            "twine>=4.0.0",
-        ],
+        # Storage backends
+        "sql": ["sqlalchemy"],
+        "mongodb": ["pymongo"],
+        "redis": ["redis"],
+        "yaml": ["pyyaml"],
+        "s3": ["boto3"],
+        # Credentials
+        "jwt": ["PyJWT"],
+        # Web
+        "web": ["fastapi", "watchdog"],
+        # Dev
+        "dev": ["pytest", "pytest-asyncio", "build", "twine"],
+        # Everything
+        "all": ["google-adk-extras[sql,mongodb,redis,yaml,s3,jwt,web]"],
     },
     keywords=["google", "adk", "session", "artifact", "memory", "storage", "database"],
     project_urls={

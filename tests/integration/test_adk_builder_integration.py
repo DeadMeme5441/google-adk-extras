@@ -6,13 +6,25 @@ import os
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+try:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    _FASTAPI = True
+except Exception:
+    _FASTAPI = False
 
 from google_adk_extras.adk_builder import AdkBuilder
-from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
 from google_adk_extras.credentials.http_basic_auth_credential_service import HTTPBasicAuthCredentialService
+try:
+    import jwt as _jwt
+    _HAVE_JWT = True
+except Exception:
+    _HAVE_JWT = False
 
+
+import pytest as _pytest
+
+_pytestmark = _pytest.mark.skipif(not _FASTAPI, reason="fastapi not installed")
 
 class TestAdkBuilderIntegration:
     """Integration tests for AdkBuilder with real services."""
@@ -62,6 +74,8 @@ tools: []
     
     def test_build_app_with_jwt_credential_service(self):
         """Test building FastAPI app with JWT credential service."""
+        if not _HAVE_JWT:
+            pytest.skip("PyJWT not installed")
         builder = AdkBuilder()
         app = (builder
                .with_agents_dir(self.agents_dir)
@@ -176,19 +190,14 @@ tools: []
     
     def test_credential_service_integration_with_app(self):
         """Test that credential service is properly integrated into the app."""
-        # Create a JWT credential service
-        jwt_service = JWTCredentialService("test-secret", issuer="test-integration")
-        
+        if not _HAVE_JWT:
+            pytest.skip("PyJWT not installed")
         builder = AdkBuilder()
         app = (builder
                .with_agents_dir(self.agents_dir)
-               .with_credential_service(jwt_service)
+               .with_credential_service_uri("jwt://test-secret@algorithm=HS256&issuer=test-integration")
                .build_fastapi_app())
-        
         assert isinstance(app, FastAPI)
-        
-        # The credential service should be initialized and available
-        # (This is validated by the fact that the app builds successfully)
         with TestClient(app) as client:
             pass
     
@@ -212,9 +221,10 @@ tools: []
     def test_uri_based_credential_configuration_integration(self):
         """Test end-to-end URI-based credential service configuration."""
         test_cases = [
-            "jwt://integration-secret@algorithm=HS256&issuer=integration-test",
             "basic-auth://integrationuser:integrationpass",
         ]
+        if _HAVE_JWT:
+            test_cases.insert(0, "jwt://integration-secret@algorithm=HS256&issuer=integration-test")
         
         for uri in test_cases:
             builder = AdkBuilder()

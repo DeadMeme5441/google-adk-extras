@@ -9,9 +9,15 @@ from google_adk_extras.credentials import (
     GitHubOAuth2CredentialService,
     MicrosoftOAuth2CredentialService,
     XOAuth2CredentialService,
-    JWTCredentialService,
     HTTPBasicAuthCredentialService,
 )
+try:
+    import jwt as _jwt
+    from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
+    _HAVE_JWT = True
+except Exception:
+    JWTCredentialService = None  # type: ignore
+    _HAVE_JWT = False
 from google.adk.auth import AuthConfig
 from google.adk.auth.credential_service.base_credential_service import CallbackContext
 from google.adk.sessions.session import Session
@@ -153,6 +159,8 @@ class TestCredentialServiceIntegration:
 
     async def test_jwt_credential_workflow(self):
         """Test JWT credential service complete workflow."""
+        if not _HAVE_JWT:
+            pytest.skip("PyJWT not installed")
         service = JWTCredentialService(
             secret="test-jwt-secret-key",
             algorithm="HS256",
@@ -196,6 +204,8 @@ class TestCredentialServiceIntegration:
 
     async def test_jwt_token_refresh_on_expiry(self):
         """Test JWT token automatic refresh when expired."""
+        if not _HAVE_JWT:
+            pytest.skip("PyJWT not installed")
         # Create service with very short expiration for testing
         service = JWTCredentialService(
             secret="test-secret",
@@ -320,10 +330,11 @@ class TestCredentialServiceIntegration:
             use_session_state=False
         )
         
-        jwt_service = JWTCredentialService(
-            secret="jwt-secret",
-            use_session_state=False
-        )
+        if _HAVE_JWT:
+            jwt_service = JWTCredentialService(
+                secret="jwt-secret",
+                use_session_state=False
+            )
         
         basic_auth_service = HTTPBasicAuthCredentialService(
             username="basic-user",
@@ -332,38 +343,43 @@ class TestCredentialServiceIntegration:
         )
         
         await google_service.initialize()
-        await jwt_service.initialize()
+        if _HAVE_JWT:
+            await jwt_service.initialize()
         await basic_auth_service.initialize()
         
         # Create different auth configs
         google_config = google_service.create_auth_config()
-        jwt_config = jwt_service.create_auth_config("test-user")
+        jwt_config = jwt_service.create_auth_config("test-user") if _HAVE_JWT else None
         basic_config = basic_auth_service.create_auth_config()
         
         mock_context = MockCallbackContext()
         
         # Save all credentials
         google_config.exchanged_auth_credential = google_config.raw_auth_credential
-        jwt_config.exchanged_auth_credential = jwt_config.raw_auth_credential
+        if _HAVE_JWT:
+            jwt_config.exchanged_auth_credential = jwt_config.raw_auth_credential
         basic_config.exchanged_auth_credential = basic_config.raw_auth_credential
         
         await google_service.save_credential(google_config, mock_context)
-        await jwt_service.save_credential(jwt_config, mock_context)
+        if _HAVE_JWT:
+            await jwt_service.save_credential(jwt_config, mock_context)
         await basic_auth_service.save_credential(basic_config, mock_context)
         
         # Load all credentials - they should not interfere with each other
         loaded_google = await google_service.load_credential(google_config, mock_context)
-        loaded_jwt = await jwt_service.load_credential(jwt_config, mock_context)
+        loaded_jwt = await jwt_service.load_credential(jwt_config, mock_context) if _HAVE_JWT else None
         loaded_basic = await basic_auth_service.load_credential(basic_config, mock_context)
         
         assert loaded_google is not None
-        assert loaded_jwt is not None
+        if _HAVE_JWT:
+            assert loaded_jwt is not None
         assert loaded_basic is not None
         
         # Verify each credential has correct type and data
         assert loaded_google.auth_type.value == "oauth2"
-        assert loaded_jwt.auth_type.value == "http"
-        assert loaded_jwt.http.scheme == "bearer"
+        if _HAVE_JWT:
+            assert loaded_jwt.auth_type.value == "http"
+            assert loaded_jwt.http.scheme == "bearer"
         assert loaded_basic.auth_type.value == "http"
         assert loaded_basic.http.scheme == "basic"
 
@@ -371,9 +387,10 @@ class TestCredentialServiceIntegration:
         """Test proper cleanup of credential services."""
         services = [
             GoogleOAuth2CredentialService("id", "secret", use_session_state=False),
-            JWTCredentialService("secret", use_session_state=False),
             HTTPBasicAuthCredentialService("user", "pass", use_session_state=False),
         ]
+        if _HAVE_JWT:
+            services.insert(1, JWTCredentialService("secret", use_session_state=False))
         
         # Initialize all services
         for service in services:

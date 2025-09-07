@@ -4,7 +4,10 @@ import pytest
 import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, AsyncMock, patch
-import jwt
+try:
+    import jwt
+except Exception:
+    jwt = None
 
 from google_adk_extras.credentials import (
     BaseCustomCredentialService,
@@ -12,7 +15,6 @@ from google_adk_extras.credentials import (
     GitHubOAuth2CredentialService,
     MicrosoftOAuth2CredentialService,
     XOAuth2CredentialService,
-    JWTCredentialService,
     HTTPBasicAuthCredentialService,
     HTTPBasicAuthWithCredentialsService,
 )
@@ -262,6 +264,9 @@ class TestJWTCredentialService:
 
     def test_init_with_defaults(self):
         """Test initialization with default parameters."""
+        if jwt is None:
+            pytest.skip("PyJWT not installed")
+        from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
         service = JWTCredentialService(
             secret="test-secret"
         )
@@ -273,6 +278,9 @@ class TestJWTCredentialService:
     @pytest.mark.asyncio
     async def test_initialization_validation(self):
         """Test initialization validation."""
+        if jwt is None:
+            pytest.skip("PyJWT not installed")
+        from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
         # Missing secret
         service = JWTCredentialService(secret="")
         with pytest.raises(ValueError, match="JWT secret is required"):
@@ -297,6 +305,9 @@ class TestJWTCredentialService:
     @pytest.mark.asyncio
     async def test_jwt_token_generation(self):
         """Test JWT token generation and verification."""
+        if jwt is None:
+            pytest.skip("PyJWT not installed")
+        from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
         service = JWTCredentialService(
             secret="test-secret",
             issuer="test-issuer",
@@ -322,6 +333,9 @@ class TestJWTCredentialService:
     @pytest.mark.asyncio
     async def test_token_expiration(self):
         """Test JWT token expiration detection."""
+        if jwt is None:
+            pytest.skip("PyJWT not installed")
+        from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
         service = JWTCredentialService(
             secret="test-secret",
             expiration_minutes=1
@@ -342,6 +356,9 @@ class TestJWTCredentialService:
     @pytest.mark.asyncio
     async def test_create_auth_config(self):
         """Test auth config creation with JWT."""
+        if jwt is None:
+            pytest.skip("PyJWT not installed")
+        from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
         service = JWTCredentialService(secret="test-secret")
         await service.initialize()
         
@@ -354,6 +371,9 @@ class TestJWTCredentialService:
 
     def test_get_token_info(self):
         """Test getting token information."""
+        if jwt is None:
+            pytest.skip("PyJWT not installed")
+        from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
         service = JWTCredentialService(secret="test-secret")
         
         # Create a test token

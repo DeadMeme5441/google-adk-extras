@@ -29,12 +29,6 @@ from google.adk.cli.adk_web_server import AdkWebServer
 
 from .custom_agent_loader import CustomAgentLoader
 from .credentials.base_custom_credential_service import BaseCustomCredentialService
-from .credentials.google_oauth2_credential_service import GoogleOAuth2CredentialService
-from .credentials.github_oauth2_credential_service import GitHubOAuth2CredentialService
-from .credentials.microsoft_oauth2_credential_service import MicrosoftOAuth2CredentialService
-from .credentials.x_oauth2_credential_service import XOAuth2CredentialService
-from .credentials.jwt_credential_service import JWTCredentialService
-from .credentials.http_basic_auth_credential_service import HTTPBasicAuthCredentialService
 
 logger = logging.getLogger(__name__)
 
@@ -529,15 +523,16 @@ class AdkBuilder:
         
         return InMemoryMemoryService()
 
-    def _create_credential_service(self) -> BaseCredentialService:
-        """Create credential service from configuration."""
+    def _create_credential_service(self) -> Optional[BaseCredentialService]:
+        """Create credential service from configuration (optional)."""
         if self._credential_service is not None:
             return self._credential_service
 
         if self._credential_service_uri:
             return self._parse_credential_service_uri(self._credential_service_uri)
         
-        return InMemoryCredentialService()
+        # No credential service configured; allow server to default
+        return None
     
     def _create_agent_loader(self) -> BaseAgentLoader:
         """Create agent loader from configuration.
@@ -622,8 +617,11 @@ class AdkBuilder:
         except Exception as e:
             raise ValueError(f"Failed to parse credential service URI '{uri}': {e}")
 
-    def _parse_google_oauth2_uri(self, uri: str) -> GoogleOAuth2CredentialService:
+    def _parse_google_oauth2_uri(self, uri: str) -> BaseCredentialService:
         """Parse Google OAuth2 URI: oauth2-google://client-id:secret@scopes=scope1,scope2"""
+        from .credentials.google_oauth2_credential_service import (
+            GoogleOAuth2CredentialService,
+        )
         # Remove scheme
         uri_part = uri[len("oauth2-google://"):]
         
@@ -653,8 +651,11 @@ class AdkBuilder:
             scopes=scopes or ["openid", "email", "profile"]
         )
 
-    def _parse_github_oauth2_uri(self, uri: str) -> GitHubOAuth2CredentialService:
+    def _parse_github_oauth2_uri(self, uri: str) -> BaseCredentialService:
         """Parse GitHub OAuth2 URI: oauth2-github://client-id:secret@scopes=user,repo"""
+        from .credentials.github_oauth2_credential_service import (
+            GitHubOAuth2CredentialService,
+        )
         uri_part = uri[len("oauth2-github://"):]
         
         if "@" in uri_part:
@@ -680,8 +681,11 @@ class AdkBuilder:
             scopes=scopes or ["user"]
         )
 
-    def _parse_microsoft_oauth2_uri(self, uri: str) -> MicrosoftOAuth2CredentialService:
+    def _parse_microsoft_oauth2_uri(self, uri: str) -> BaseCredentialService:
         """Parse Microsoft OAuth2 URI: oauth2-microsoft://tenant-id/client-id:secret@scopes=User.Read"""
+        from .credentials.microsoft_oauth2_credential_service import (
+            MicrosoftOAuth2CredentialService,
+        )
         uri_part = uri[len("oauth2-microsoft://"):]
         
         if "@" in uri_part:
@@ -714,8 +718,9 @@ class AdkBuilder:
             scopes=scopes or ["User.Read"]
         )
 
-    def _parse_x_oauth2_uri(self, uri: str) -> XOAuth2CredentialService:
+    def _parse_x_oauth2_uri(self, uri: str) -> BaseCredentialService:
         """Parse X OAuth2 URI: oauth2-x://client-id:secret@scopes=tweet.read,users.read"""
+        from .credentials.x_oauth2_credential_service import XOAuth2CredentialService
         uri_part = uri[len("oauth2-x://"):]
         
         if "@" in uri_part:
@@ -741,8 +746,9 @@ class AdkBuilder:
             scopes=scopes or ["tweet.read", "users.read", "offline.access"]
         )
 
-    def _parse_jwt_uri(self, uri: str) -> JWTCredentialService:
+    def _parse_jwt_uri(self, uri: str) -> BaseCredentialService:
         """Parse JWT URI: jwt://secret@algorithm=HS256&issuer=my-app&audience=api.example.com&expiration_minutes=60"""
+        from .credentials.jwt_credential_service import JWTCredentialService
         uri_part = uri[len("jwt://"):]
         
         if "@" in uri_part:
@@ -783,8 +789,11 @@ class AdkBuilder:
             custom_claims=custom_claims
         )
 
-    def _parse_basic_auth_uri(self, uri: str) -> HTTPBasicAuthCredentialService:
+    def _parse_basic_auth_uri(self, uri: str) -> BaseCredentialService:
         """Parse Basic Auth URI: basic-auth://username:password@realm=My API"""
+        from .credentials.http_basic_auth_credential_service import (
+            HTTPBasicAuthCredentialService,
+        )
         uri_part = uri[len("basic-auth://"):]
         
         if "@" in uri_part:
@@ -855,7 +864,7 @@ class AdkBuilder:
             session_db_kwargs=self._session_db_kwargs,
             artifact_service_uri=self._artifact_service_uri,
             memory_service_uri=self._memory_service_uri,
-            credential_service=credential_service,  # Our custom credential service
+            credential_service=credential_service,  # May be None; server will default
             eval_storage_uri=self._eval_storage_uri,
             allow_origins=self._allow_origins,
             web=self._web_ui,
@@ -881,13 +890,27 @@ class AdkBuilder:
         Raises:
             ValueError: If required configuration is missing.
         """
-        if not self._agents_dir and isinstance(agent_or_agent_name, str):
-            raise ValueError("agents_dir is required when using agent name. Use with_agents_dir() to set it.")
-        
-        # Load agent if name provided
+        # Resolve agent instance
         if isinstance(agent_or_agent_name, str):
-            agent_loader = AgentLoader(self._agents_dir)
-            agent = agent_loader.load_agent(agent_or_agent_name)
+            name = agent_or_agent_name
+            agent = None
+            # 1) Prefer explicitly provided custom loader (supports programmatic agents)
+            if self._agent_loader is not None:
+                try:
+                    agent = self._agent_loader.load_agent(name)
+                except Exception:
+                    agent = None
+            # 2) Try registered agents collected via with_agent_instance()/with_agents()
+            if agent is None and self._registered_agents:
+                agent = self._registered_agents.get(name)
+            # 3) Fallback to directory-based AgentLoader if agents_dir is set
+            if agent is None and self._agents_dir:
+                agent = AgentLoader(self._agents_dir).load_agent(name)
+            if agent is None:
+                raise ValueError(
+                    "Agent not found. Provide an instance via with_agent_instance()/with_agents(), "
+                    "or set a custom loader with with_agent_loader(), or set with_agents_dir() for directory-based loading."
+                )
         else:
             agent = agent_or_agent_name
         

@@ -8,12 +8,22 @@ import json
 from datetime import datetime
 
 from google.genai import types
-from google_adk_extras.memory import (
-    SQLMemoryService,
-    MongoMemoryService,
-    RedisMemoryService,
-    YamlFileMemoryService,
-)
+try:
+    from google_adk_extras.memory import SQLMemoryService
+except Exception:
+    SQLMemoryService = None
+try:
+    from google_adk_extras.memory import MongoMemoryService
+except Exception:
+    MongoMemoryService = None
+try:
+    from google_adk_extras.memory import RedisMemoryService
+except Exception:
+    RedisMemoryService = None
+try:
+    from google_adk_extras.memory import YamlFileMemoryService
+except Exception:
+    YamlFileMemoryService = None
 from google.adk.memory.memory_entry import MemoryEntry
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
@@ -31,6 +41,8 @@ class TestSQLMemoryService:
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test SQL memory service initialization."""
+        if SQLMemoryService is None:
+            pytest.skip("SQLAlchemy not installed")
         with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp_file:
             tmp_file.close()
             try:
@@ -44,6 +56,8 @@ class TestSQLMemoryService:
     @pytest.mark.asyncio
     async def test_add_session_and_search(self):
         """Test adding a session and searching memory."""
+        if SQLMemoryService is None:
+            pytest.skip("SQLAlchemy not installed")
         with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp_file:
             tmp_file.close()
             try:
@@ -100,6 +114,8 @@ class TestMongoMemoryService:
     async def test_initialization(self):
         """Test MongoDB memory service initialization."""
         # Patch the MongoClient to avoid actual connection
+        if MongoMemoryService is None:
+            pytest.skip("pymongo not installed")
         from unittest.mock import patch
         with patch('google_adk_extras.memory.mongo_memory_service.MongoClient') as mock_mongo_client:
             # Mock the MongoDB client and database
@@ -122,6 +138,8 @@ class TestRedisMemoryService:
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test Redis memory service initialization."""
+        if RedisMemoryService is None:
+            pytest.skip("redis-py not installed")
         # Use a mock Redis client for testing
         service = RedisMemoryService("localhost", 6379, 0)
         
@@ -155,6 +173,8 @@ class TestYamlFileMemoryService:
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test YAML file memory service initialization."""
+        if YamlFileMemoryService is None:
+            pytest.skip("pyyaml not installed")
         with tempfile.TemporaryDirectory() as tmp_dir:
             service = YamlFileMemoryService(tmp_dir)
             await service.initialize()
@@ -164,6 +184,8 @@ class TestYamlFileMemoryService:
     @pytest.mark.asyncio
     async def test_add_session_and_search(self):
         """Test adding a session and searching memory."""
+        if YamlFileMemoryService is None:
+            pytest.skip("pyyaml not installed")
         with tempfile.TemporaryDirectory() as tmp_dir:
             service = YamlFileMemoryService(tmp_dir)
             await service.initialize()

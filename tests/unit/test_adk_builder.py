@@ -11,7 +11,6 @@ from fastapi import FastAPI
 
 from google_adk_extras.adk_builder import AdkBuilder
 from google_adk_extras.credentials.google_oauth2_credential_service import GoogleOAuth2CredentialService
-from google_adk_extras.credentials.jwt_credential_service import JWTCredentialService
 from google_adk_extras.credentials.http_basic_auth_credential_service import HTTPBasicAuthCredentialService
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
@@ -105,11 +104,16 @@ class TestAdkBuilder:
     
     def test_credential_service_jwt_uri_parsing(self):
         """Test JWT URI parsing."""
+        try:
+            import jwt  # noqa: F401
+        except Exception:
+            pytest.skip("PyJWT not installed")
         builder = AdkBuilder()
         builder.with_credential_service_uri("jwt://my-secret@algorithm=HS256&issuer=test-app")
         
         credential_service = builder._create_credential_service()
-        assert isinstance(credential_service, JWTCredentialService)
+        # Avoid importing optional class; verify by name
+        assert credential_service.__class__.__name__ == "JWTCredentialService"
         assert credential_service.secret == "my-secret"
         assert credential_service.algorithm == "HS256"
         assert credential_service.issuer == "test-app"
@@ -207,6 +211,10 @@ class TestAdkBuilder:
     @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
     def test_build_fastapi_app_with_all_options(self, mock_enhanced_app):
         """Test building FastAPI app with all configuration options."""
+        try:
+            import jwt  # noqa: F401
+        except Exception:
+            pytest.skip("PyJWT not installed")
         mock_app = MagicMock(spec=FastAPI)
         mock_enhanced_app.return_value = mock_app
         
@@ -251,6 +259,10 @@ class TestAdkBuilder:
     @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
     def test_credential_service_initialization(self, mock_enhanced_app):
         """Test that custom credential services are properly initialized."""
+        try:
+            import jwt  # noqa: F401
+        except Exception:
+            pytest.skip("PyJWT not installed")
         mock_app = MagicMock(spec=FastAPI)
         mock_enhanced_app.return_value = mock_app
         

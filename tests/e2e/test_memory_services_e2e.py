@@ -6,10 +6,14 @@ import os
 from datetime import datetime, timedelta
 
 from google.genai import types
-from google_adk_extras.memory import (
-    SQLMemoryService,
-    YamlFileMemoryService,
-)
+try:
+    from google_adk_extras.memory import SQLMemoryService
+except Exception:
+    SQLMemoryService = None
+try:
+    from google_adk_extras.memory import YamlFileMemoryService
+except Exception:
+    YamlFileMemoryService = None
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
@@ -20,6 +24,8 @@ class TestMemoryServiceRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_customer_support_conversation_memory(self):
         """Test memory service with a customer support conversation scenario."""
+        if SQLMemoryService is None:
+            pytest.skip("SQLAlchemy not installed")
         with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp_file:
             tmp_file.close()
             try:
@@ -112,6 +118,8 @@ class TestMemoryServiceRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_personal_assistant_memory_with_multiple_sessions(self):
         """Test memory service with a personal assistant handling multiple sessions."""
+        if YamlFileMemoryService is None:
+            pytest.skip("pyyaml not installed")
         with tempfile.TemporaryDirectory() as tmp_dir:
             service = YamlFileMemoryService(tmp_dir)
             await service.initialize()

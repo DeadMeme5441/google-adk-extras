@@ -10,8 +10,11 @@ from unittest.mock import patch, MagicMock
 from google.genai.types import Blob, Part
 
 from google_adk_extras.artifacts.base_custom_artifact_service import BaseCustomArtifactService
-from google_adk_extras.artifacts.sql_artifact_service import SQLArtifactService
 from google_adk_extras.artifacts.local_folder_artifact_service import LocalFolderArtifactService
+try:
+    from google_adk_extras.artifacts.sql_artifact_service import SQLArtifactService
+except Exception:
+    SQLArtifactService = None
 
 
 class TestBaseCustomArtifactService:
@@ -264,12 +267,16 @@ class TestLocalFolderArtifactService:
             await service.cleanup()
 
 
+import pytest as _pytest
+
 class TestSQLArtifactService:
     """Test the SQL artifact service."""
 
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test that the SQL service initializes correctly."""
+        if SQLArtifactService is None:
+            _pytest.skip("SQLAlchemy not installed")
         service = SQLArtifactService("sqlite:///:memory:")
         await service.initialize()
         assert service._initialized
@@ -278,6 +285,8 @@ class TestSQLArtifactService:
     @pytest.mark.asyncio
     async def test_save_and_load_artifact(self, sample_text_blob):
         """Test saving and loading an artifact."""
+        if SQLArtifactService is None:
+            _pytest.skip("SQLAlchemy not installed")
         service = SQLArtifactService("sqlite:///:memory:")
         await service.initialize()
 
@@ -312,6 +321,8 @@ class TestSQLArtifactService:
     @pytest.mark.asyncio
     async def test_list_artifact_keys(self, sample_text_blob, sample_image_blob):
         """Test listing artifact keys."""
+        if SQLArtifactService is None:
+            _pytest.skip("SQLAlchemy not installed")
         service = SQLArtifactService("sqlite:///:memory:")
         await service.initialize()
 

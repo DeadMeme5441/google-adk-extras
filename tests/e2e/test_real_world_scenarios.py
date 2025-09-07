@@ -15,14 +15,19 @@ from google.adk.events.event import Event
 from google.adk.runners import InMemoryRunner
 from google.genai.types import Blob, Part, Content
 
-from google_adk_extras.sessions import (
-    SQLSessionService,
-    YamlFileSessionService
-)
-from google_adk_extras.artifacts import (
-    SQLArtifactService,
-    LocalFolderArtifactService
-)
+try:
+    from google_adk_extras.sessions import SQLSessionService
+except Exception:
+    SQLSessionService = None
+try:
+    from google_adk_extras.sessions import YamlFileSessionService
+except Exception:
+    YamlFileSessionService = None
+try:
+    from google_adk_extras.artifacts import SQLArtifactService
+except Exception:
+    SQLArtifactService = None
+from google_adk_extras.artifacts import LocalFolderArtifactService
 
 
 class TestEndToEndScenarios:
@@ -32,6 +37,8 @@ class TestEndToEndScenarios:
     async def test_document_management_workflow(self, temp_dir):
         """Test a complete document management workflow."""
         # Setup services
+        if YamlFileSessionService is None:
+            pytest.skip("pyyaml not installed")
         session_service = YamlFileSessionService(temp_dir)
         artifact_service = LocalFolderArtifactService(temp_dir)
         
@@ -170,6 +177,8 @@ class TestEndToEndScenarios:
     async def test_multi_user_collaboration_scenario(self, temp_dir):
         """Test a multi-user collaboration scenario."""
         # Setup services
+        if SQLSessionService is None or SQLArtifactService is None:
+            pytest.skip("SQLAlchemy not installed")
         session_service = SQLSessionService("sqlite:///:memory:")
         artifact_service = SQLArtifactService("sqlite:///:memory:")
         
@@ -277,6 +286,8 @@ class TestEndToEndScenarios:
     async def test_backup_and_restore_scenario(self, temp_dir):
         """Test backup and restore scenario using file-based services."""
         # Setup services
+        if YamlFileSessionService is None:
+            pytest.skip("pyyaml not installed")
         session_service = YamlFileSessionService(temp_dir)
         artifact_service = LocalFolderArtifactService(temp_dir)
         

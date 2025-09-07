@@ -1,29 +1,41 @@
 [project]
 name = "google-adk-extras"
-version = "0.1.5"
-description = "Custom implementations of Google ADK services (Session, Artifact, Memory) with multiple storage backends"
+version = "0.2.0"
+description = "Production-ready services, credentials, and FastAPI wiring for Google ADK"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.13"
+authors = [
+  { name = "DeadMeme5441", email = "deadunderscorememe@gmail.com" }
+]
 dependencies = [
-    "google-genai>=1.0.0",
-    "sqlalchemy>=2.0.0",
-    "pymongo>=4.0.0",
-    "redis>=4.0.0",
-    "pyyaml>=6.0.0",
-    "tomli>=2.0.0",
-    "typing-extensions>=4.0.0",
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.1.0",
-    "google-adk>=1.13.0",
-    "boto3>=1.0.0",
-    "PyJWT>=2.0.0",
+    "google-adk",
+    "google-genai",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=6.0",
-    "pytest-asyncio>=0.15.0",
-    "google-genai>=1.0.0",
+# Storage backends
+sql = ["sqlalchemy"]
+mongodb = ["pymongo"]
+redis = ["redis"]
+yaml = ["pyyaml"]
+s3 = ["boto3"]
+
+# Credentials
+jwt = ["PyJWT"]
+
+# Web server integration
+web = ["fastapi", "watchdog"]
+
+
+# Dev / test tooling only
+dev = ["pytest", "pytest-asyncio", "build", "twine"]
+
+# Docs site (MkDocs)
+docs = ["mkdocs", "mkdocs-material"]
+
+# Everything
+all = [
+    "google-adk-extras[sql,mongodb,redis,yaml,s3,jwt,web,docs]",
 ]
 
 [build-system]

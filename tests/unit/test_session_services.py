@@ -11,8 +11,11 @@ from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 from google_adk_extras.sessions.base_custom_session_service import BaseCustomSessionService
-from google_adk_extras.sessions.sql_session_service import SQLSessionService
 from google_adk_extras.sessions.yaml_file_session_service import YamlFileSessionService
+try:
+    from google_adk_extras.sessions.sql_session_service import SQLSessionService
+except Exception:
+    SQLSessionService = None
 
 
 class TestBaseCustomSessionService:
@@ -231,6 +234,8 @@ class TestSQLSessionService:
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test that the SQL service initializes correctly."""
+        if SQLSessionService is None:
+            pytest.skip("SQLAlchemy not installed")
         service = SQLSessionService("sqlite:///:memory:")
         await service.initialize()
         assert service._initialized
@@ -239,6 +244,8 @@ class TestSQLSessionService:
     @pytest.mark.asyncio
     async def test_create_and_get_session(self):
         """Test creating and retrieving a session."""
+        if SQLSessionService is None:
+            pytest.skip("SQLAlchemy not installed")
         service = SQLSessionService("sqlite:///:memory:")
         await service.initialize()
 
@@ -278,6 +285,8 @@ class TestSQLSessionService:
         # Use a unique database for this test
         import uuid
         unique_id = str(uuid.uuid4())[:8]
+        if SQLSessionService is None:
+            pytest.skip("SQLAlchemy not installed")
         service = SQLSessionService(f"sqlite:///:memory:?cache=shared&unique={unique_id}")
         await service.initialize()
 
@@ -316,6 +325,8 @@ class TestSQLSessionService:
     @pytest.mark.asyncio
     async def test_delete_session(self):
         """Test deleting a session."""
+        if SQLSessionService is None:
+            pytest.skip("SQLAlchemy not installed")
         service = SQLSessionService("sqlite:///:memory:")
         await service.initialize()
 
@@ -356,6 +367,8 @@ class TestSQLSessionService:
     @pytest.mark.asyncio
     async def test_append_event(self):
         """Test appending an event to a session."""
+        if SQLSessionService is None:
+            pytest.skip("SQLAlchemy not installed")
         service = SQLSessionService("sqlite:///:memory:")
         await service.initialize()
 

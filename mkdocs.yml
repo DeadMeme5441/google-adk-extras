@@ -1,98 +1,31 @@
 site_name: Google ADK Extras
-site_description: Production-ready extensions for Google ADK (services, runner, FastAPI, configuration)
-site_url: https://DeadMeme5441.github.io/google-adk-extras/
+site_description: Production-ready services, credentials, and FastAPI wiring for Google ADK
+site_url: https://deadmeme5441.github.io/google-adk-extras/
 repo_url: https://github.com/DeadMeme5441/google-adk-extras
-repo_name: google-adk-extras
-
 theme:
   name: material
   features:
-    - navigation.sections
-    - navigation.expand
+    - navigation.instant
+    - navigation.tracking
     - content.code.copy
-    - search.suggest
-    - toc.follow
-  palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-
-plugins:
-  - llmstxt
-  - search
-  - mkdocstrings:
-      handlers:
-        python:
-          paths: [src]
-          options:
-            show_source: false
-            docstring_style: google
-            show_root_heading: true
-            show_category_heading: true
-            heading_level: 2
-            show_object_full_path: false
-            filters: ["!^__", "!^_"]
-
+    - content.action.edit
+nav:
+  - Overview: index.md
+  - Getting Started: getting-started.md
+  - Quickstarts: quickstarts.md
+  - FastAPI Integration: fastapi.md
+  - Services:
+      - Durable Services: services.md
+      - Credentials: credentials.md
+  - Programmatic Agents: agent-loading.md
+  - URIs & Configuration: uris.md
+  - Examples: examples.md
+  - Troubleshooting: troubleshooting.md
 markdown_extensions:
   - admonition
   - codehilite
-  - footnotes
-  - tables
   - toc:
       permalink: true
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-  - pymdownx.details
-  - pymdownx.tabbed
-  - pymdownx.emoji
-  - pymdownx.tasklist
-
-extra_javascript:
-  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
-
-nav:
-  - Home: index.md
-  - Get Started:
-      - Installation: get-started/installation.md
-      - Quickstart (Runner): get-started/quickstart-runner.md
-      - Quickstart (FastAPI): get-started/quickstart-fastapi.md
-      - Using With ADK: get-started/using-with-adk.md
-  - Concepts:
-      - Services: concepts/services.md
-      - Enhanced Runner: concepts/enhanced-runner.md
-      - Registries: concepts/registries.md
-      - Configuration: concepts/configuration.md
-      - ADK Integration: concepts/adk-integration.md
-  - How-To Guides:
-      - Sessions: how-to/sessions.md
-      - Memory: how-to/memory.md
-      - Artifacts: how-to/artifacts.md
-      - Credentials: how-to/credentials.md
-      - Builder: how-to/builder.md
-      - FastAPI Integration: how-to/fastapi.md
-      - Tool Strategies: how-to/strategies.md
-      - Error Handling: how-to/errors.md
-      - Migrate from ADK Defaults: how-to/migrate-from-adk.md
-  - Tutorials:
-      - OAuth Chat App: tutorials/oauth-chat-app.md
-      - YAML Runner Config: tutorials/yaml-runner.md
-      - OpenAPI Tool + Circuit Breaker: tutorials/openapi-tool.md
-      - Deploy with Docker: tutorials/deploy-docker.md
-      - Observability: tutorials/observability.md
-  - Examples: examples/index.md
-  - Reference:
-      - API (Overview): reference/api/index.md
-      - Configuration Reference: reference/config/index.md
-      - Service URI Cheatsheet: reference/uris.md
-      - Error Types: reference/errors.md
-  - Operations:
-      - Performance & Caching: operations/performance.md
-      - Security: operations/security.md
-      - Troubleshooting & FAQ: operations/troubleshooting.md
-  - Contributing: contributing.md
-  - Changelog: changelog.md
+plugins:
+  - search
+docs_dir: docs

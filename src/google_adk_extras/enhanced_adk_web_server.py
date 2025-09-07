@@ -8,14 +8,12 @@ import os
 from typing import Optional
 
 from google.adk.cli.adk_web_server import AdkWebServer
+from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.adk.cli.utils import cleanup
 from google.adk.cli.utils import envs
 from google.adk.runners import Runner
 
-from .runners.enhanced_runner import EnhancedRunner
-from .runners.config import EnhancedRunConfig
-from .runners.errors import YamlSystemContext
-from .runners.strategies import ToolExecutionStrategyManager
+from .enhanced_runner import EnhancedRunner
 
 
 class EnhancedAdkWebServer(AdkWebServer):
@@ -73,16 +71,7 @@ class EnhancedAdkWebServer(AdkWebServer):
         ```
     """
     
-    def __init__(
-        self,
-        *,
-        # Enhanced features (new parameters)
-        enhanced_config: Optional[EnhancedRunConfig] = None,
-        yaml_context: Optional[YamlSystemContext] = None,
-        tool_strategy_manager: Optional[ToolExecutionStrategyManager] = None,
-        # Standard AdkWebServer parameters (passed through)
-        **kwargs
-    ):
+    def __init__(self, **kwargs):
         """Initialize EnhancedAdkWebServer.
         
         Args:
@@ -91,13 +80,14 @@ class EnhancedAdkWebServer(AdkWebServer):
             tool_strategy_manager: Tool execution strategy manager (optional)
             **kwargs: All other parameters passed to AdkWebServer
         """
+        # Ensure a credential service exists; default to InMemory if not provided
+        if 'credential_service' not in kwargs or kwargs.get('credential_service') is None:
+            kwargs['credential_service'] = InMemoryCredentialService()
+
         # Initialize base AdkWebServer with all standard parameters
         super().__init__(**kwargs)
         
-        # Store enhanced configuration
-        self.enhanced_config = enhanced_config or EnhancedRunConfig()
-        self.yaml_context = yaml_context
-        self.tool_strategy_manager = tool_strategy_manager
+        # No enhanced configuration retained in simplified scope
 
     async def get_runner_async(self, app_name: str) -> EnhancedRunner:
         """Returns the enhanced runner for the given app.
@@ -132,30 +122,14 @@ class EnhancedAdkWebServer(AdkWebServer):
         # Load agent and create new EnhancedRunner
         root_agent = self.agent_loader.load_agent(app_name)
         
-        # Create enhanced YAML context for this specific app
-        app_yaml_context = self.yaml_context
-        if not app_yaml_context:
-            app_yaml_context = YamlSystemContext(
-                system_name=app_name,
-                current_agent=app_name
-            )
-        else:
-            # Create a copy with app-specific context
-            app_yaml_context = app_yaml_context.with_agent(app_name)
-        
-        # Create EnhancedRunner instead of Runner
+        # Create EnhancedRunner (thin wrapper over ADK Runner)
         runner = EnhancedRunner(
-            # Standard parameters (same as AdkWebServer)
             app_name=app_name,
             agent=root_agent,
             artifact_service=self.artifact_service,
             session_service=self.session_service,
             memory_service=self.memory_service,
             credential_service=self.credential_service,
-            # Enhanced parameters
-            enhanced_config=self.enhanced_config,
-            yaml_context=app_yaml_context,
-            tool_strategy_manager=self.tool_strategy_manager,
         )
         
         # Cache and return runner (same as parent)
