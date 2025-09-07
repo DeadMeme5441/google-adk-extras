@@ -1,0 +1,84 @@
+site_name: Google ADK Extras
+site_description: Production-ready extensions for Google ADK (services, runner, FastAPI, configuration)
+site_url: https://DeadMeme5441.github.io/google-adk-extras/
+repo_url: https://github.com/DeadMeme5441/google-adk-extras
+repo_name: google-adk-extras
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            docstring_style: google
+  - mermaid2
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed
+  - pymdownx.emoji
+  - pymdownx.tasklist
+
+nav:
+  - Home: index.md
+  - Get Started:
+      - Installation: get-started/installation.md
+      - Quickstart (Runner): get-started/quickstart-runner.md
+      - Quickstart (FastAPI): get-started/quickstart-fastapi.md
+  - Concepts:
+      - Services: concepts/services.md
+      - Enhanced Runner: concepts/enhanced-runner.md
+      - Registries: concepts/registries.md
+      - Configuration: concepts/configuration.md
+  - How-To Guides:
+      - Sessions: how-to/sessions.md
+      - Memory: how-to/memory.md
+      - Artifacts: how-to/artifacts.md
+      - Credentials: how-to/credentials.md
+      - Builder: how-to/builder.md
+      - FastAPI Integration: how-to/fastapi.md
+      - Tool Strategies: how-to/strategies.md
+      - Error Handling: how-to/errors.md
+  - Tutorials:
+      - OAuth Chat App: tutorials/oauth-chat-app.md
+      - YAML Runner Config: tutorials/yaml-runner.md
+      - OpenAPI Tool + Circuit Breaker: tutorials/openapi-tool.md
+      - Deploy with Docker: tutorials/deploy-docker.md
+      - Observability: tutorials/observability.md
+  - Examples: examples/index.md
+  - Reference:
+      - API (Overview): reference/api/index.md
+      - Configuration Reference: reference/config/index.md
+      - Service URI Cheatsheet: reference/uris.md
+      - Error Types: reference/errors.md
+  - Operations:
+      - Performance & Caching: operations/performance.md
+      - Security: operations/security.md
+      - Troubleshooting & FAQ: operations/troubleshooting.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md

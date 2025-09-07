@@ -64,7 +64,7 @@ Each example showcases:
 
 ## Requirements
 
-- **Python 3.10+**
+- **Python 3.12+**
 - **Google ADK**: `pip install google-adk`
 - **This Package**: `pip install google-adk-extras`
 

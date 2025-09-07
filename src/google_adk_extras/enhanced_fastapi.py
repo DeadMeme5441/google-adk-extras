@@ -379,9 +379,9 @@ def get_enhanced_fast_api_app(
 
         except ImportError as e:
             import sys
-            if sys.version_info < (3, 10):
+            if sys.version_info < (3, 12):
                 raise ImportError(
-                    "A2A requires Python 3.10 or above. Please upgrade your Python version."
+                    "A2A requires Python 3.12 or above. Please upgrade your Python version."
                 ) from e
             else:
                 raise e

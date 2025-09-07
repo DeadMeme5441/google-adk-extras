@@ -3,7 +3,7 @@
 [![CI](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/ci.yml/badge.svg)](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/ci.yml)
 [![PyPI version](https://badge.fury.io/py/google-adk-extras.svg)](https://badge.fury.io/py/google-adk-extras)
 
-A comprehensive extension library for Google ADK that provides production-ready implementations of custom services, enhanced runners, flexible configuration systems, and powerful agent composition capabilities.
+A comprehensive extension library for Google ADK that provides production-ready implementations of custom services, enhanced runners, and a flexible configuration system.
 
 ## Overview
 
@@ -13,7 +13,8 @@ This package transforms Google ADK from a simple framework into a production-rea
 - **Credential Services** for OAuth2 providers (Google, GitHub, Microsoft, X) and authentication systems
 - **Flexible Configuration Architecture** with automatic format detection and environment interpolation
 - **Enhanced Web Server** with FastAPI integration and advanced features
-- **Agent Composition Patterns** for building complex multi-agent systems
+  
+Note: Agent composition remains available via ADK’s native sequential/parallel/loop agents.
 
 ## Features
 
@@ -62,11 +63,9 @@ This package transforms Google ADK from a simple framework into a production-rea
 - **Custom Agent Loader**: Instance-based agent management
 - **Advanced Routing**: Dynamic route registration and management
 
-### 🤖 Agent Composition & Enhanced Runners
+### 🤖 Enhanced Runners
 - **Enhanced Runner**: Extended ADK runner with monitoring and error handling
-- **Agent Composition**: Patterns for building multi-agent systems
-- **Composition Strategies**: Sequential, parallel, and conditional agent execution
-- **YAML-Driven Systems**: Define complex agent workflows in configuration files
+- **YAML-Driven Systems**: Define runner behavior in configuration files
 
 ## Installation
 
@@ -164,11 +163,10 @@ jwt_service = JWTCredentialService(secret="your-jwt-secret")
 token = await jwt_service.generate_token({"user_id": "123", "role": "admin"})
 ```
 
-### 5. Enhanced Runner & Agent Composition
+### 5. Enhanced Runner
 
 ```python
 from google_adk_extras.runners import EnhancedRunner
-from google_adk_extras.runners.composition import AgentComposer, SequentialStrategy
 
 # Enhanced runner with monitoring
 runner = EnhancedRunner(
@@ -178,10 +176,7 @@ runner = EnhancedRunner(
     app_name="my_app"
 )
 
-# Agent composition
-composer = AgentComposer()
-workflow = composer.create_composition([agent1, agent2, agent3], SequentialStrategy())
-result = await workflow.execute("Process this request")
+result = await runner.run("Process this request")
 ```
 
 ### 6. YAML-Driven Configuration
@@ -238,7 +233,6 @@ The codebase follows a plugin-style architecture with clear separation of concer
 - **Service Implementations**: Concrete implementations for different storage backends
 - **Configuration System**: Flexible configuration loading with validation and interpolation
 - **Registry Infrastructure**: Dynamic component registration with health monitoring
-- **Composition Patterns**: Reusable patterns for building complex agent workflows
 
 All services follow async patterns and require explicit `initialize()` calls before use.
 
@@ -258,7 +252,7 @@ Each example includes:
 
 ## Requirements
 
-- **Python 3.10+**
+- **Python 3.12+**
 - **Google ADK** (`pip install google-adk`)
 
 ### Optional Dependencies (installed automatically with extras)

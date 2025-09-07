@@ -10,7 +10,7 @@ This directory contains comprehensive examples demonstrating all the powerful fe
 - [`credentials/`](credentials/) - OAuth2 providers and authentication services
 - [`configuration/`](configuration/) - Configuration system examples (Coming Soon)
 - [`registry/`](registry/) - Agent and tool registry examples (Coming Soon)
-- [`composition/`](composition/) - Agent composition and workflow examples (Coming Soon)
+  
 
 ## What You'll Learn
 
@@ -23,12 +23,12 @@ This directory contains comprehensive examples demonstrating all the powerful fe
 ### Advanced Features  
 - **Configuration Architecture**: YAML-driven configuration with environment interpolation
 - **Registry Infrastructure**: Hot-swappable agents and tools with health monitoring
-- **Agent Composition**: Multi-agent workflows and execution strategies
+- **Enhanced Runners**: Production-ready runners with monitoring and error handling
 - **Enhanced Runners**: Production-ready runners with monitoring and error handling
 
 ## Requirements
 
-- **Python 3.10+**
+- **Python 3.12+**
 - **Google ADK**: `pip install google-adk`
 - **This Package**: `pip install google-adk-extras`
 - **UV Package Manager** (recommended): `pip install uv`
