@@ -8,6 +8,8 @@ Production-ready extensions for Google ADK: robust services (sessions, memory, a
 
 Why this package?
 
+Note: This library complements Google ADK. See ADK docs: https://github.com/google/adk-docs
+
 - Custom service implementations with multiple backends (SQL, MongoDB, Redis, S3, YAML)
 - Credential services (OAuth2 providers, JWT, Basic) that plug into ADK
 - Enhanced Runner with YAML-driven configuration, retries, circuit breakers, and rich errors
