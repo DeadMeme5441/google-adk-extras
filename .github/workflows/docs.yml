@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   docs:
@@ -29,8 +31,18 @@ jobs:
           # Install the package so mkdocstrings can import modules
           uv pip install --system -e .
 
-      - name: Build and deploy (via uv)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build site (mkdocs)
         run: |
-          uv run mkdocs gh-deploy --force
+          uv run mkdocs build --strict --site-dir site
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
