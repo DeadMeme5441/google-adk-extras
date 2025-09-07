@@ -28,4 +28,29 @@ markdown_extensions:
       permalink: true
 plugins:
   - search
+  - llmstxt:
+      markdown_description: |
+        Production-ready services, credential flows (OAuth2/JWT/Basic), and FastAPI wiring for Google ADK.
+        Durable backends for sessions, artifacts, and memory with simple URI config and a fluent builder.
+      full_output: llms-full.txt
+      sections:
+        Overview:
+        - index.md: Overview & value proposition
+        Getting Started:
+        - getting-started.md
+        Quickstarts:
+        - quickstarts.md
+        FastAPI Integration:
+        - fastapi.md
+        Services:
+        - services.md: Durable services backends
+        - credentials.md: Credential services (OAuth2/JWT/Basic)
+        Programmatic Agents:
+        - agent-loading.md
+        URIs & Configuration:
+        - uris.md
+        Examples:
+        - examples.md
+        Troubleshooting:
+        - troubleshooting.md
 docs_dir: docs

@@ -1,0 +1,45 @@
+# Google ADK Extras
+
+> Production-ready services, credentials, and FastAPI wiring for Google ADK
+
+Production-ready services, credential flows (OAuth2/JWT/Basic), and FastAPI wiring for Google ADK.
+Durable backends for sessions, artifacts, and memory with simple URI config and a fluent builder.
+
+
+## Overview
+
+- [Overview](https://deadmeme5441.github.io/google-adk-extras/index.md): Overview & value proposition
+
+## Getting Started
+
+- [Getting Started](https://deadmeme5441.github.io/google-adk-extras/getting-started/index.md)
+
+## Quickstarts
+
+- [Quickstarts](https://deadmeme5441.github.io/google-adk-extras/quickstarts/index.md)
+
+## FastAPI Integration
+
+- [FastAPI Integration](https://deadmeme5441.github.io/google-adk-extras/fastapi/index.md)
+
+## Services
+
+- [Durable Services](https://deadmeme5441.github.io/google-adk-extras/services/index.md): Durable services backends
+- [Credentials](https://deadmeme5441.github.io/google-adk-extras/credentials/index.md): Credential services (OAuth2/JWT/Basic)
+
+## Programmatic Agents
+
+- [Programmatic Agents](https://deadmeme5441.github.io/google-adk-extras/agent-loading/index.md)
+
+## URIs & Configuration
+
+- [URIs & Configuration](https://deadmeme5441.github.io/google-adk-extras/uris/index.md)
+
+## Examples
+
+- [Examples](https://deadmeme5441.github.io/google-adk-extras/examples/index.md)
+
+## Troubleshooting
+
+- [Troubleshooting](https://deadmeme5441.github.io/google-adk-extras/troubleshooting/index.md)
+

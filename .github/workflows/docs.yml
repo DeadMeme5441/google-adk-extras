@@ -17,17 +17,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version-file: pyproject.toml
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v4
+      - name: Ensure Python installed for uv
+        run: uv python install
 
-      - name: Install dependencies
+      - name: Install doc dependencies
         run: |
-          uv pip install --system .[docs]
+          uv pip install .[docs]
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

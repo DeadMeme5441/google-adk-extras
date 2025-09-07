@@ -31,7 +31,7 @@ web = ["fastapi", "watchdog"]
 dev = ["pytest", "pytest-asyncio", "build", "twine"]
 
 # Docs site (MkDocs)
-docs = ["mkdocs", "mkdocs-material"]
+docs = ["mkdocs", "mkdocs-material", "mkdocs-llmstxt"]
 
 # Everything
 all = [
