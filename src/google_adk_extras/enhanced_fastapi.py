@@ -9,7 +9,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
-from typing import Any, Mapping, Optional, List
+from typing import Any, Mapping, Optional, List, Callable, Dict
 
 import click
 from fastapi import FastAPI
@@ -56,6 +56,9 @@ def get_enhanced_fast_api_app(
     allow_origins: Optional[List[str]] = None,
     web: bool = True,
     a2a: bool = False,
+    programmatic_a2a: bool = False,
+    programmatic_a2a_mount_base: str = "/a2a",
+    programmatic_a2a_card_factory: Optional[Callable[[str, Any], Dict[str, Any]]] = None,
     host: str = "127.0.0.1",
     port: int = 8000,
     trace_to_cloud: bool = False,
@@ -356,49 +359,108 @@ def get_enhanced_fast_api_app(
             else:
                 raise e
 
-        base_path = Path.cwd() / agents_dir
-        if base_path.exists() and base_path.is_dir():
-            a2a_task_store = InMemoryTaskStore()
+        a2a_task_store = InMemoryTaskStore()
 
-            def create_a2a_runner_loader(captured_app_name: str):
-                async def _get_a2a_runner_async() -> Runner:
-                    return await adk_web_server.get_runner_async(captured_app_name)
-                return _get_a2a_runner_async
+        def create_a2a_runner_loader(captured_app_name: str):
+            async def _get_a2a_runner_async() -> Runner:
+                return await adk_web_server.get_runner_async(captured_app_name)
+            return _get_a2a_runner_async
 
-            for p in base_path.iterdir():
-                if (
-                    p.is_file()
-                    or p.name.startswith((".", "__pycache__"))
-                    or not (p / "agent.json").is_file()
-                ):
-                    continue
+        # 1) Directory-based A2A (existing behavior)
+        if agents_dir:
+            base_path = Path.cwd() / agents_dir
+            if base_path.exists() and base_path.is_dir():
+                for p in base_path.iterdir():
+                    if (
+                        p.is_file()
+                        or p.name.startswith((".", "__pycache__"))
+                        or not (p / "agent.json").is_file()
+                    ):
+                        continue
 
-                app_name = p.name
-                logger.info("Setting up A2A agent: %s", app_name)
+                    app_name = p.name
+                    logger.info("Setting up A2A agent (dir): %s", app_name)
 
+                    try:
+                        agent_executor = A2aAgentExecutor(
+                            runner=create_a2a_runner_loader(app_name),
+                        )
+                        request_handler = DefaultRequestHandler(
+                            agent_executor=agent_executor, task_store=a2a_task_store
+                        )
+                        with (p / "agent.json").open("r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            agent_card = AgentCard(**data)
+                        a2a_app = A2AStarletteApplication(
+                            agent_card=agent_card,
+                            http_handler=request_handler,
+                        )
+                        routes = a2a_app.routes(
+                            rpc_url=f"/a2a/{app_name}",
+                            agent_card_url=f"/a2a/{app_name}{AGENT_CARD_WELL_KNOWN_PATH}",
+                        )
+                        for new_route in routes:
+                            app.router.routes.append(new_route)
+                        logger.info("Configured A2A agent (dir): %s", app_name)
+                    except Exception as e:
+                        logger.error("Failed to setup A2A agent %s: %s", app_name, e)
+
+        # 2) Programmatic A2A for registered agents (no agents_dir)
+        if programmatic_a2a and not agents_dir:
+            # Attempt to enumerate agents from the provided loader
+            agent_names = []
+            if hasattr(final_agent_loader, "list_agents"):
                 try:
+                    agent_names = final_agent_loader.list_agents()  # type: ignore[attr-defined]
+                except Exception:
+                    agent_names = []
+
+            for app_name in agent_names:
+                try:
+                    agent_instance = final_agent_loader.load_agent(app_name)
+                except Exception:
+                    agent_instance = None
+
+                logger.info("Setting up A2A agent (programmatic): %s", app_name)
+                try:
+                    # Construct AgentCard data
+                    data: Dict[str, Any]
+                    if programmatic_a2a_card_factory and agent_instance is not None:
+                        try:
+                            data = programmatic_a2a_card_factory(app_name, agent_instance)
+                        except TypeError:
+                            # Backward compatibility: factory taking only name
+                            data = programmatic_a2a_card_factory(app_name)  # type: ignore[misc]
+                    else:
+                        # Minimal default card
+                        data = {
+                            "name": app_name,
+                            "description": f"A2A-exposed agent {app_name}",
+                            "defaultInputModes": ["text/plain"],
+                            "defaultOutputModes": ["application/json"],
+                            "version": "1.0.0",
+                        }
+
                     agent_executor = A2aAgentExecutor(
                         runner=create_a2a_runner_loader(app_name),
                     )
                     request_handler = DefaultRequestHandler(
                         agent_executor=agent_executor, task_store=a2a_task_store
                     )
-                    with (p / "agent.json").open("r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        agent_card = AgentCard(**data)
+                    agent_card = AgentCard(**data)
                     a2a_app = A2AStarletteApplication(
                         agent_card=agent_card,
                         http_handler=request_handler,
                     )
                     routes = a2a_app.routes(
-                        rpc_url=f"/a2a/{app_name}",
-                        agent_card_url=f"/a2a/{app_name}{AGENT_CARD_WELL_KNOWN_PATH}",
+                        rpc_url=f"{programmatic_a2a_mount_base}/{app_name}",
+                        agent_card_url=f"{programmatic_a2a_mount_base}/{app_name}{AGENT_CARD_WELL_KNOWN_PATH}",
                     )
                     for new_route in routes:
                         app.router.routes.append(new_route)
-                    logger.info("Successfully configured A2A agent: %s", app_name)
+                    logger.info("Configured A2A agent (programmatic): %s", app_name)
                 except Exception as e:
-                    logger.error("Failed to setup A2A agent %s: %s", app_name, e)
+                    logger.error("Failed to setup programmatic A2A agent %s: %s", app_name, e)
 
     logger.info("Enhanced FastAPI app created with credential service support")
     return app

@@ -7,7 +7,7 @@ with support for custom credential services and enhanced configuration options.
 import os
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union, Callable
 from starlette.types import Lifespan
 
 from fastapi import FastAPI
@@ -95,11 +95,18 @@ class AdkBuilder:
         self._allow_origins: Optional[List[str]] = None
         self._web_ui: bool = False
         self._a2a: bool = False
+        # Programmatic A2A exposure (for registered/programmatic agents)
+        self._a2a_expose_programmatic: bool = False
+        self._a2a_programmatic_mount_base: str = "/a2a"
+        self._a2a_card_factory: Optional[Callable[[str, BaseAgent], Dict[str, Any]]] = None
         self._host: str = "127.0.0.1"
         self._port: int = 8000
         self._trace_to_cloud: bool = False
         self._reload_agents: bool = False
         self._lifespan: Optional[Lifespan[FastAPI]] = None
+
+        # Staging list for remote A2A agents to register (if import is deferred)
+        self._pending_remote_a2a: List[Dict[str, str]] = []
 
     # Core configuration methods
     def with_agents_dir(self, agents_dir: str) -> "AdkBuilder":
@@ -300,6 +307,78 @@ class AdkBuilder:
         """
         self._a2a = enabled
         return self
+
+    def enable_a2a_for_registered_agents(
+        self,
+        *,
+        enabled: bool = True,
+        mount_base: str = "/a2a",
+        card_factory: Optional[Callable[[str, BaseAgent], Dict[str, Any]]] = None,
+    ) -> "AdkBuilder":
+        """Expose programmatically registered agents over A2A.
+
+        This enables A2A for agents added via with_agent_instance()/with_agents()
+        without requiring an `agents_dir`. Optionally provide a `card_factory`
+        to generate Agent Card dictionaries for each agent.
+
+        Args:
+            enabled: Toggle exposure.
+            mount_base: Base path to mount A2A routes, default "/a2a".
+            card_factory: Optional callable (name, agent) -> dict for AgentCard.
+
+        Returns:
+            AdkBuilder: Self for chaining.
+        """
+        self._a2a_expose_programmatic = enabled
+        self._a2a_programmatic_mount_base = mount_base
+        self._a2a_card_factory = card_factory
+        return self
+
+    def with_remote_a2a_agent(
+        self, name: str, agent_card_url: str, description: Optional[str] = None
+    ) -> "AdkBuilder":
+        """Register a remote A2A agent (client proxy) by agent card URL.
+
+        Attempts to instantiate ADK's RemoteA2aAgent and register it by name.
+        Requires ADK installed with A2A extras: `pip install google-adk[a2a]`.
+
+        Args:
+            name: Logical name to register.
+            agent_card_url: Full URL to the remote agent card (well-known path).
+            description: Optional description.
+
+        Returns:
+            AdkBuilder: Self for chaining.
+        """
+        # Try multiple likely import paths to be robust across ADK versions
+        RemoteA2aAgent = None  # type: ignore
+        import_error: Optional[Exception] = None
+        for path in (
+            "google.adk.a2a.remote_a2a_agent",
+            "google.adk.a2a.remote_agent",
+            "google.adk.a2a.client.remote_a2a_agent",
+        ):
+            try:
+                module = __import__(path, fromlist=["RemoteA2aAgent"])  # type: ignore
+                RemoteA2aAgent = getattr(module, "RemoteA2aAgent")  # type: ignore
+                break
+            except Exception as e:  # ImportError or AttributeError
+                import_error = e
+                continue
+
+        if RemoteA2aAgent is None:
+            raise ImportError(
+                "Could not import RemoteA2aAgent from ADK. Ensure A2A extras are installed: "
+                "pip install google-adk[a2a]. Last error: %r" % (import_error,)
+            )
+
+        # Instantiate and register
+        remote = RemoteA2aAgent(
+            name=name,
+            description=description or name,
+            agent_card=agent_card_url,
+        )
+        return self.with_agent_instance(name, remote)
 
     def with_host_port(self, host: str = "127.0.0.1", port: int = 8000) -> "AdkBuilder":
         """Configure host and port for the server.
@@ -869,6 +948,9 @@ class AdkBuilder:
             allow_origins=self._allow_origins,
             web=self._web_ui,
             a2a=self._a2a,
+            programmatic_a2a=self._a2a_expose_programmatic,
+            programmatic_a2a_mount_base=self._a2a_programmatic_mount_base,
+            programmatic_a2a_card_factory=self._a2a_card_factory,
             host=self._host,
             port=self._port,
             trace_to_cloud=self._trace_to_cloud,

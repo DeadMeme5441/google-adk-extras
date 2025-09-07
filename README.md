@@ -29,6 +29,7 @@ This package focuses on three gaps common in real apps:
 - Credential services: Google/GitHub/Microsoft/X (OAuth2), JWT, HTTP Basic
 - Enhanced FastAPI wiring that respects a provided credential service
 - Fluent builder (`AdkBuilder`) to assemble a FastAPI app or a Runner
+ - A2A helpers for exposing/consuming agents (see below)
 
 Note on Runner: `EnhancedRunner` is a thin subclass of ADK’s `Runner` for compatibility with the enhanced web server; it does not change behavior.
 
@@ -117,7 +118,52 @@ ADK defines abstract service interfaces and a runner/web stack. This package pro
   - `SQLSessionService` — SQLAlchemy; JSON‑serialized state/events
   - `MongoSessionService` — PyMongo; per‑session doc, indexed by app/user/id
   - `RedisSessionService` — hashes per session + user set; JSON state/events
-  - `YamlFileSessionService` — `base/app/user/{session_id}.yaml`
+- `YamlFileSessionService` — `base/app/user/{session_id}.yaml`
+
+### A2A helpers (new)
+
+Two light-weight helpers wrap ADK’s A2A capabilities:
+
+- `AdkBuilder.enable_a2a_for_registered_agents(enabled=True, mount_base="/a2a", card_factory=None)`
+  - Expose programmatically registered agents (added via `with_agent_instance()` / `with_agents()`) over A2A without an `agents_dir`.
+  - Optionally supply `card_factory(name, agent) -> dict` to build an Agent Card; otherwise a minimal card is used.
+
+- `AdkBuilder.with_remote_a2a_agent(name, agent_card_url, description=None)`
+  - Register a `RemoteA2aAgent` by agent card URL so your root agent can delegate to a remote agent.
+  - Requires `google-adk[a2a]` installed.
+
+Expose a programmatic agent via A2A:
+
+```python
+from google_adk_extras import AdkBuilder
+from google.adk.agents import Agent
+
+hello = Agent(model="gemini-2.0-flash", name="hello", instruction="You are helpful.")
+
+app = (
+    AdkBuilder()
+      .with_agent_instance("hello", hello)
+      .with_a2a_protocol(True)
+      .enable_a2a_for_registered_agents()  # becomes available at /a2a/hello
+      .build_fastapi_app()
+)
+```
+
+Consume a remote A2A agent:
+
+```python
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+from google_adk_extras import AdkBuilder
+
+card_url = f"http://remote-host:8001/a2a/prime{AGENT_CARD_WELL_KNOWN_PATH}"
+
+app = (
+    AdkBuilder()
+      .with_remote_a2a_agent("prime_agent", card_url, description="Prime checker")
+      # add your root agent via with_agent_instance(...)
+      .build_fastapi_app()
+)
+```
 
 - Artifacts
   - `LocalFolderArtifactService` — per‑artifact metadata JSON + versioned data files
