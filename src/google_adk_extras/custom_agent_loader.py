@@ -146,6 +146,20 @@ class CustomAgentLoader(BaseAgentLoader):
         sorted_agents = sorted(agent_names)
         logger.debug("Total registered agents: %d", len(sorted_agents))
         return sorted_agents
+
+    # Compatibility with ADK's AgentLoader API used by AgentChangeEventHandler
+    def remove_agent_from_cache(self, name: str) -> None:
+        """No-op cache invalidation for compatibility with ADK hot reload.
+
+        ADK's file-watcher calls `agent_loader.remove_agent_from_cache(current_app)`
+        when files change. Our loader does not cache filesystem-loaded agents,
+        but we provide this method to satisfy the expected interface.
+
+        Args:
+            name: Agent name to invalidate (ignored here).
+        """
+        # Nothing to do; present for interface compatibility.
+        logger.debug("CustomAgentLoader.remove_agent_from_cache(%s) - no-op", name)
     
     
     def __repr__(self) -> str:

@@ -151,7 +151,7 @@ def get_enhanced_fast_api_app(
             agent_engine_id = agent_engine_id_or_resource_name
         return project, location, agent_engine_id
 
-    # Build the Memory service (same as ADK)
+    # Build the Memory service (enhanced to recognize extras URIs)
     if memory_service_uri:
         if memory_service_uri.startswith("rag://"):
             from google.adk.memory.vertex_ai_rag_memory_service import VertexAiRagMemoryService
@@ -172,6 +172,19 @@ def get_enhanced_fast_api_app(
                 location=location,
                 agent_engine_id=agent_engine_id,
             )
+        elif memory_service_uri.startswith("yaml://"):
+            from .memory.yaml_file_memory_service import YamlFileMemoryService
+            base_directory = memory_service_uri.split("://")[1]
+            memory_service = YamlFileMemoryService(base_directory=base_directory)
+        elif memory_service_uri.startswith("redis://"):
+            from .memory.redis_memory_service import RedisMemoryService
+            memory_service = RedisMemoryService(connection_string=memory_service_uri)  # type: ignore[arg-type]
+        elif memory_service_uri.startswith(("sqlite://", "postgresql://", "mysql://")):
+            from .memory.sql_memory_service import SQLMemoryService
+            memory_service = SQLMemoryService(database_url=memory_service_uri)
+        elif memory_service_uri.startswith("mongodb://"):
+            from .memory.mongo_memory_service import MongoMemoryService
+            memory_service = MongoMemoryService(connection_string=memory_service_uri)
         else:
             raise click.ClickException(
                 "Unsupported memory service URI: %s" % memory_service_uri
@@ -179,7 +192,7 @@ def get_enhanced_fast_api_app(
     else:
         memory_service = InMemoryMemoryService()
 
-    # Build the Session service (same as ADK)
+    # Build the Session service (enhanced to recognize extras URIs)
     if session_service_uri:
         if session_service_uri.startswith("agentengine://"):
             agent_engine_id_or_resource_name = session_service_uri.split("://")[1]
@@ -191,8 +204,18 @@ def get_enhanced_fast_api_app(
                 location=location,
                 agent_engine_id=agent_engine_id,
             )
+        elif session_service_uri.startswith("yaml://"):
+            from .sessions.yaml_file_session_service import YamlFileSessionService
+            base_directory = session_service_uri.split("://")[1]
+            session_service = YamlFileSessionService(base_directory=base_directory)
+        elif session_service_uri.startswith("redis://"):
+            from .sessions.redis_session_service import RedisSessionService
+            session_service = RedisSessionService(connection_string=session_service_uri)  # type: ignore[arg-type]
+        elif session_service_uri.startswith("mongodb://"):
+            from .sessions.mongo_session_service import MongoSessionService
+            session_service = MongoSessionService(connection_string=session_service_uri)
         else:
-            # Database session additional settings
+            # Treat remaining schemes as database URLs (sqlite/postgres/mysql)
             if session_db_kwargs is None:
                 session_db_kwargs = {}
             session_service = DatabaseSessionService(
@@ -201,11 +224,25 @@ def get_enhanced_fast_api_app(
     else:
         session_service = InMemorySessionService()
 
-    # Build the Artifact service (same as ADK)
+    # Build the Artifact service (enhanced to recognize extras URIs)
     if artifact_service_uri:
         if artifact_service_uri.startswith("gs://"):
             gcs_bucket = artifact_service_uri.split("://")[1]
             artifact_service = GcsArtifactService(bucket_name=gcs_bucket)
+        elif artifact_service_uri.startswith("local://"):
+            from .artifacts.local_folder_artifact_service import LocalFolderArtifactService
+            base_directory = artifact_service_uri.split("://")[1]
+            artifact_service = LocalFolderArtifactService(base_directory=base_directory)
+        elif artifact_service_uri.startswith("s3://"):
+            from .artifacts.s3_artifact_service import S3ArtifactService
+            bucket_name = artifact_service_uri.split("://")[1]
+            artifact_service = S3ArtifactService(bucket_name=bucket_name)
+        elif artifact_service_uri.startswith(("sqlite://", "postgresql://", "mysql://")):
+            from .artifacts.sql_artifact_service import SQLArtifactService
+            artifact_service = SQLArtifactService(database_url=artifact_service_uri)
+        elif artifact_service_uri.startswith("mongodb://"):
+            from .artifacts.mongo_artifact_service import MongoArtifactService
+            artifact_service = MongoArtifactService(connection_string=artifact_service_uri)
         else:
             raise click.ClickException(
                 "Unsupported artifact service URI: %s" % artifact_service_uri
