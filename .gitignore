@@ -29,3 +29,5 @@ Thumbs.db
 .gemini/
 QWEN.md
 site/
+
+.env
