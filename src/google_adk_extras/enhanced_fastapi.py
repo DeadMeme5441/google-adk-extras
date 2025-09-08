@@ -5,6 +5,7 @@ that properly supports custom credential services.
 """
 
 import json
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -34,6 +35,7 @@ from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.utils.feature_decorator import working_in_progress
 from google.adk.cli.adk_web_server import AdkWebServer
 from .enhanced_adk_web_server import EnhancedAdkWebServer
+from .streaming import StreamingController, StreamingConfig
 from google.adk.cli.utils import envs
 from google.adk.cli.utils import evals
 from google.adk.cli.utils.agent_change_handler import AgentChangeEventHandler
@@ -64,6 +66,9 @@ def get_enhanced_fast_api_app(
     trace_to_cloud: bool = False,
     reload_agents: bool = False,
     lifespan: Optional[Lifespan[FastAPI]] = None,
+    # Streaming layer (optional)
+    enable_streaming: bool = False,
+    streaming_config: Optional[StreamingConfig] = None,
 ) -> FastAPI:
     """Enhanced version of Google ADK's get_fast_api_app with EnhancedRunner integration.
     
@@ -504,4 +509,96 @@ def get_enhanced_fast_api_app(
                     logger.error("Failed to setup programmatic A2A agent %s: %s", app_name, e)
 
     logger.info("Enhanced FastAPI app created with credential service support")
+
+    # Optional streaming mounts (SSE + WebSocket)
+    if enable_streaming:
+        cfg = streaming_config or StreamingConfig(enable_streaming=True)
+        controller = StreamingController(
+            config=cfg,
+            get_runner_async=adk_web_server.get_runner_async,
+            session_service=session_service,
+        )
+        app.state.streaming_controller = controller
+        @app.on_event("startup")
+        async def _start_streaming():  # pragma: no cover - lifecycle glue
+            controller.start()
+        @app.on_event("shutdown")
+        async def _stop_streaming():  # pragma: no cover - lifecycle glue
+            await controller.stop()
+
+        from fastapi import APIRouter, WebSocket, Query
+        from fastapi.responses import StreamingResponse
+        from google.adk.cli.adk_web_server import RunAgentRequest
+
+        router = APIRouter()
+        base = cfg.streaming_path_base.rstrip("/")
+
+        @router.get(f"{base}/events/{{channel_id}}")
+        async def stream_events(channel_id: str, appName: str = Query(...), userId: str = Query(...), sessionId: Optional[str] = Query(None)):
+            ch = await app.state.streaming_controller.open_or_bind_channel(
+                channel_id=channel_id, app_name=appName, user_id=userId, session_id=sessionId
+            )
+            q = app.state.streaming_controller.subscribe(channel_id, kind="sse")
+
+            async def gen():
+                try:
+                    # Announce channel binding with session id
+                    yield "event: channel-bound\n"
+                    yield f"data: {{\"appName\":\"{appName}\",\"userId\":\"{userId}\",\"sessionId\":\"{ch.session_id}\"}}\n\n"
+                    while True:
+                        payload = await q.get()
+                        yield f"data: {payload}\n\n"
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    app.state.streaming_controller.unsubscribe(channel_id, q)
+
+            return StreamingResponse(gen(), media_type="text/event-stream")
+
+        @router.post(f"{base}/send/{{channel_id}}")
+        async def send_message(channel_id: str, req: RunAgentRequest):
+            # Validation: channel binding must match
+            await app.state.streaming_controller.enqueue(channel_id, req)
+            return PlainTextResponse("", status_code=204)
+
+        @router.websocket(f"{base}/ws/{{channel_id}}")
+        async def ws_endpoint(websocket: WebSocket, channel_id: str, appName: str, userId: str, sessionId: Optional[str] = None):
+            await websocket.accept()
+            try:
+                await app.state.streaming_controller.open_or_bind_channel(
+                    channel_id=channel_id, app_name=appName, user_id=userId, session_id=sessionId
+                )
+                q = app.state.streaming_controller.subscribe(channel_id, kind="ws")
+                # Send channel binding info including session id
+                await websocket.send_text(json.dumps({"event": "channel-bound", "appName": appName, "userId": userId, "sessionId": app.state.streaming_controller._channels[channel_id].session_id}))
+
+                async def downlink():
+                    try:
+                        while True:
+                            payload = await q.get()
+                            await websocket.send_text(payload)
+                    except asyncio.CancelledError:
+                        pass
+
+                async def uplink():
+                    try:
+                        while True:
+                            text = await websocket.receive_text()
+                            # Strict type parity by default
+                            req = RunAgentRequest.model_validate_json(text)
+                            await app.state.streaming_controller.enqueue(channel_id, req)
+                    except Exception:
+                        return
+
+                down = asyncio.create_task(downlink())
+                up = asyncio.create_task(uplink())
+                await asyncio.wait({down, up}, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                try:
+                    app.state.streaming_controller.unsubscribe(channel_id, q)
+                except Exception:
+                    pass
+
+        app.include_router(router)
+
     return app
