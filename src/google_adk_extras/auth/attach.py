@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import AuthConfig, JwtIssuerConfig, JwtValidatorConfig
 from .jwt_utils import decode_jwt, encode_jwt, now_ts
-from .sql_store import AuthStore
+from typing import Any
 
 
 def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
@@ -25,9 +25,14 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
     issuer_cfg = cfg.jwt_issuer
     api_keys = set(cfg.api_keys or [])
     basic_users = cfg.basic_users or {}
-    auth_store: Optional[AuthStore] = None
+    auth_store: Optional[Any] = None
     if issuer_cfg and issuer_cfg.database_url:
-        auth_store = AuthStore(issuer_cfg.database_url)
+        try:
+            from .sql_store import AuthStore  # type: ignore
+            auth_store = AuthStore(issuer_cfg.database_url)
+        except Exception:
+            # SQL store not available; API key issuance and password grants will be unavailable.
+            auth_store = None
 
     # Security helpers
     api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)

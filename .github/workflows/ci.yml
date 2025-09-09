@@ -24,10 +24,10 @@ jobs:
     - name: Setup uv
       uses: astral-sh/setup-uv@v4
 
-    - name: Install dependencies including Google ADK and test dependencies
+    - name: Install test extras
       run: |
         uv sync
-        uv pip install pytest pytest-asyncio google-genai
+        uv pip install -e '.[all,dev]'
 
     - name: Run tests
       run: |
@@ -46,10 +46,10 @@ jobs:
     - name: Setup uv
       uses: astral-sh/setup-uv@v4
 
-    - name: Install dependencies including Google ADK and test dependencies
+    - name: Install lint deps
       run: |
         uv sync
-        uv pip install pytest pytest-asyncio google-genai
+        uv pip install -e '.[dev]'
 
     - name: Run linting
       run: |
