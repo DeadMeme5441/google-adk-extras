@@ -93,6 +93,9 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
             return True
         if path == "/run_sse" and method == "POST":
             return True
+        # Protect streaming controller HTTP endpoints (SSE + HTTP send)
+        if path.startswith("/stream/"):
+            return True
         # Sessions and artifacts under /apps
         if path.startswith("/apps/"):
             # Allow metrics to be toggled
@@ -124,6 +127,14 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
             # Optional: Enforce user ownership when path has /users/{user_id}/
             try:
                 parts = path.strip("/").split("/")
+                # For SSE: enforce that ?userId matches token subject when present
+                if path.startswith("/stream/"):
+                    q_uid = request.query_params.get("userId")
+                    if q_uid:
+                        sub = str(request.state.identity.get("sub"))
+                        if request.state.identity.get("method") != "api_key" and sub != q_uid:
+                            from fastapi.responses import JSONResponse
+                            return JSONResponse({"detail": "Forbidden: user mismatch"}, status_code=403)
                 if "users" in parts:
                     idx = parts.index("users")
                     claimed = parts[idx + 1]
