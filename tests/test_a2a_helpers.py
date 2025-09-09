@@ -1,8 +1,7 @@
 import sys
 import types
-from typing import Any, Dict
+from typing import Any
 
-import pytest
 
 
 def _install_stub(path: str, **attrs):

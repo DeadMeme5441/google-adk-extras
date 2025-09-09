@@ -4,9 +4,7 @@ This module provides the AdkBuilder class that extends Google ADK's FastAPI inte
 with support for custom credential services and enhanced configuration options.
 """
 
-import os
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union, Callable
 from starlette.types import Lifespan
 
@@ -15,20 +13,16 @@ from google.adk.runners import Runner
 from google.adk.agents.base_agent import BaseAgent
 from google.adk.sessions.base_session_service import BaseSessionService
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
-from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.artifacts.base_artifact_service import BaseArtifactService
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 # GCS removed - vendor specific
 from google.adk.memory.base_memory_service import BaseMemoryService
 from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.auth.credential_service.base_credential_service import BaseCredentialService
-from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.adk.cli.utils.agent_loader import AgentLoader
 from google.adk.cli.utils.base_agent_loader import BaseAgentLoader
-from google.adk.cli.adk_web_server import AdkWebServer
 
 from .custom_agent_loader import CustomAgentLoader
-from .credentials.base_custom_credential_service import BaseCustomCredentialService
 
 logger = logging.getLogger(__name__)
 
@@ -43,24 +37,19 @@ class AdkBuilder:
     Example:
         ```python
         from google_adk_extras import AdkBuilder
-        from google_adk_extras.credentials import GoogleOAuth2CredentialService
+        # (removed) custom credential service example
         
         # Build FastAPI app with Google OAuth2 credentials
         app = (AdkBuilder()
                .with_agents_dir("./agents")
                .with_session_service("sqlite:///sessions.db")
-               .with_credential_service(GoogleOAuth2CredentialService(
-                   client_id="your-client-id",
-                   client_secret="your-secret",
-                   scopes=["calendar", "gmail.readonly"]
-               ))
+               # credentials: rely on ADK defaults or pass an ADK BaseCredentialService explicitly
                .with_web_ui()
                .build_fastapi_app())
         
         # Or build a Runner directly  
         runner = (AdkBuilder()
                   .with_agents_dir("./agents")
-                  .with_credential_service_uri("oauth2-google://client-id:secret@scopes=calendar,gmail.readonly")
                   .build_runner("my_agent"))
         ```
     """
@@ -75,7 +64,7 @@ class AdkBuilder:
         self._session_service_uri: Optional[str] = None
         self._artifact_service_uri: Optional[str] = None
         self._memory_service_uri: Optional[str] = None
-        self._credential_service_uri: Optional[str] = None
+        # Note: custom credential-service URI parsing has been removed.
         self._eval_storage_uri: Optional[str] = None
         
         # Service instances (alternative to URIs)
@@ -190,25 +179,7 @@ class AdkBuilder:
         self._memory_service_uri = uri
         return self
 
-    def with_credential_service_uri(self, uri: str) -> "AdkBuilder":
-        """Configure credential service using URI.
-        
-        Supported URIs:
-        - "oauth2-google://client-id:secret@scopes=scope1,scope2"
-        - "oauth2-github://client-id:secret@scopes=user,repo"  
-        - "oauth2-microsoft://tenant-id/client-id:secret@scopes=User.Read"
-        - "oauth2-x://client-id:secret@scopes=tweet.read,users.read"
-        - "jwt://secret@algorithm=HS256&issuer=my-app&audience=api.example.com&expiration_minutes=60"
-        - "basic-auth://username:password@realm=My API"
-        
-        Args:
-            uri: Credential service URI.
-            
-        Returns:
-            AdkBuilder: Self for method chaining.
-        """
-        self._credential_service_uri = uri
-        return self
+    # Removed: URI-based credential service configuration. Use with_credential_service(instance) if needed.
 
     def with_eval_storage(self, uri: str) -> "AdkBuilder":
         """Configure evaluation storage using URI.
@@ -606,15 +577,8 @@ class AdkBuilder:
         return InMemoryMemoryService()
 
     def _create_credential_service(self) -> Optional[BaseCredentialService]:
-        """Create credential service from configuration (optional)."""
-        if self._credential_service is not None:
-            return self._credential_service
-
-        if self._credential_service_uri:
-            return self._parse_credential_service_uri(self._credential_service_uri)
-        
-        # No credential service configured; allow server to default
-        return None
+        """Return explicitly provided ADK credential service instance (optional)."""
+        return self._credential_service
     
     def _create_agent_loader(self) -> BaseAgentLoader:
         """Create agent loader from configuration.
@@ -669,237 +633,19 @@ class AdkBuilder:
             "or with_agent_loader() to configure agents."
         )
 
-    def _parse_credential_service_uri(self, uri: str) -> BaseCredentialService:
-        """Parse credential service URI and create appropriate service.
-        
-        Args:
-            uri: Credential service URI.
-            
-        Returns:
-            BaseCredentialService: Configured credential service.
-            
-        Raises:
-            ValueError: If URI format is invalid or unsupported.
-        """
-        try:
-            if uri.startswith("oauth2-google://"):
-                return self._parse_google_oauth2_uri(uri)
-            elif uri.startswith("oauth2-github://"):
-                return self._parse_github_oauth2_uri(uri)
-            elif uri.startswith("oauth2-microsoft://"):
-                return self._parse_microsoft_oauth2_uri(uri)
-            elif uri.startswith("oauth2-x://"):
-                return self._parse_x_oauth2_uri(uri)
-            elif uri.startswith("jwt://"):
-                return self._parse_jwt_uri(uri)
-            elif uri.startswith("basic-auth://"):
-                return self._parse_basic_auth_uri(uri)
-            else:
-                raise ValueError(f"Unsupported credential service URI scheme: {uri}")
-        except Exception as e:
-            raise ValueError(f"Failed to parse credential service URI '{uri}': {e}")
+    # Removed: all URI-based credential parsing helpers for credentials.
 
-    def _parse_google_oauth2_uri(self, uri: str) -> BaseCredentialService:
-        """Parse Google OAuth2 URI: oauth2-google://client-id:secret@scopes=scope1,scope2"""
-        from .credentials.google_oauth2_credential_service import (
-            GoogleOAuth2CredentialService,
-        )
-        # Remove scheme
-        uri_part = uri[len("oauth2-google://"):]
-        
-        # Split at @
-        if "@" in uri_part:
-            credentials_part, params_part = uri_part.split("@", 1)
-        else:
-            credentials_part = uri_part
-            params_part = ""
-        
-        # Parse credentials
-        if ":" in credentials_part:
-            client_id, client_secret = credentials_part.split(":", 1)
-        else:
-            raise ValueError("Google OAuth2 URI must include client_id:client_secret")
-        
-        # Parse parameters
-        scopes = []
-        if params_part:
-            for param in params_part.split("&"):
-                if param.startswith("scopes="):
-                    scopes = param[7:].split(",")
-        
-        return GoogleOAuth2CredentialService(
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=scopes or ["openid", "email", "profile"]
-        )
+    # (removed) _parse_google_oauth2_uri
 
-    def _parse_github_oauth2_uri(self, uri: str) -> BaseCredentialService:
-        """Parse GitHub OAuth2 URI: oauth2-github://client-id:secret@scopes=user,repo"""
-        from .credentials.github_oauth2_credential_service import (
-            GitHubOAuth2CredentialService,
-        )
-        uri_part = uri[len("oauth2-github://"):]
-        
-        if "@" in uri_part:
-            credentials_part, params_part = uri_part.split("@", 1)
-        else:
-            credentials_part = uri_part
-            params_part = ""
-        
-        if ":" in credentials_part:
-            client_id, client_secret = credentials_part.split(":", 1)
-        else:
-            raise ValueError("GitHub OAuth2 URI must include client_id:client_secret")
-        
-        scopes = []
-        if params_part:
-            for param in params_part.split("&"):
-                if param.startswith("scopes="):
-                    scopes = param[7:].split(",")
-        
-        return GitHubOAuth2CredentialService(
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=scopes or ["user"]
-        )
+    # (removed) _parse_github_oauth2_uri
 
-    def _parse_microsoft_oauth2_uri(self, uri: str) -> BaseCredentialService:
-        """Parse Microsoft OAuth2 URI: oauth2-microsoft://tenant-id/client-id:secret@scopes=User.Read"""
-        from .credentials.microsoft_oauth2_credential_service import (
-            MicrosoftOAuth2CredentialService,
-        )
-        uri_part = uri[len("oauth2-microsoft://"):]
-        
-        if "@" in uri_part:
-            credentials_part, params_part = uri_part.split("@", 1)
-        else:
-            credentials_part = uri_part
-            params_part = ""
-        
-        # Parse tenant_id/client_id:secret
-        if "/" in credentials_part:
-            tenant_part, client_part = credentials_part.split("/", 1)
-        else:
-            raise ValueError("Microsoft OAuth2 URI must include tenant-id/client-id:secret")
-        
-        if ":" in client_part:
-            client_id, client_secret = client_part.split(":", 1)
-        else:
-            raise ValueError("Microsoft OAuth2 URI must include client_id:client_secret")
-        
-        scopes = []
-        if params_part:
-            for param in params_part.split("&"):
-                if param.startswith("scopes="):
-                    scopes = param[7:].split(",")
-        
-        return MicrosoftOAuth2CredentialService(
-            tenant_id=tenant_part,
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=scopes or ["User.Read"]
-        )
+    # (removed) _parse_microsoft_oauth2_uri
 
-    def _parse_x_oauth2_uri(self, uri: str) -> BaseCredentialService:
-        """Parse X OAuth2 URI: oauth2-x://client-id:secret@scopes=tweet.read,users.read"""
-        from .credentials.x_oauth2_credential_service import XOAuth2CredentialService
-        uri_part = uri[len("oauth2-x://"):]
-        
-        if "@" in uri_part:
-            credentials_part, params_part = uri_part.split("@", 1)
-        else:
-            credentials_part = uri_part
-            params_part = ""
-        
-        if ":" in credentials_part:
-            client_id, client_secret = credentials_part.split(":", 1)
-        else:
-            raise ValueError("X OAuth2 URI must include client_id:client_secret")
-        
-        scopes = []
-        if params_part:
-            for param in params_part.split("&"):
-                if param.startswith("scopes="):
-                    scopes = param[7:].split(",")
-        
-        return XOAuth2CredentialService(
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=scopes or ["tweet.read", "users.read", "offline.access"]
-        )
+    # (removed) _parse_x_oauth2_uri
 
-    def _parse_jwt_uri(self, uri: str) -> BaseCredentialService:
-        """Parse JWT URI: jwt://secret@algorithm=HS256&issuer=my-app&audience=api.example.com&expiration_minutes=60"""
-        from .credentials.jwt_credential_service import JWTCredentialService
-        uri_part = uri[len("jwt://"):]
-        
-        if "@" in uri_part:
-            secret, params_part = uri_part.split("@", 1)
-        else:
-            secret = uri_part
-            params_part = ""
-        
-        # Parse parameters
-        algorithm = "HS256"
-        issuer = None
-        audience = None
-        expiration_minutes = 60
-        custom_claims = {}
-        
-        if params_part:
-            for param in params_part.split("&"):
-                if "=" in param:
-                    key, value = param.split("=", 1)
-                    if key == "algorithm":
-                        algorithm = value
-                    elif key == "issuer":
-                        issuer = value
-                    elif key == "audience":
-                        audience = value
-                    elif key == "expiration_minutes":
-                        expiration_minutes = int(value)
-                    else:
-                        # Custom claim
-                        custom_claims[key] = value
-        
-        return JWTCredentialService(
-            secret=secret,
-            algorithm=algorithm,
-            issuer=issuer,
-            audience=audience,
-            expiration_minutes=expiration_minutes,
-            custom_claims=custom_claims
-        )
+    # (removed) _parse_jwt_uri
 
-    def _parse_basic_auth_uri(self, uri: str) -> BaseCredentialService:
-        """Parse Basic Auth URI: basic-auth://username:password@realm=My API"""
-        from .credentials.http_basic_auth_credential_service import (
-            HTTPBasicAuthCredentialService,
-        )
-        uri_part = uri[len("basic-auth://"):]
-        
-        if "@" in uri_part:
-            credentials_part, params_part = uri_part.split("@", 1)
-        else:
-            credentials_part = uri_part
-            params_part = ""
-        
-        if ":" in credentials_part:
-            username, password = credentials_part.split(":", 1)
-        else:
-            raise ValueError("Basic Auth URI must include username:password")
-        
-        realm = None
-        if params_part:
-            for param in params_part.split("&"):
-                if param.startswith("realm="):
-                    realm = param[6:]
-        
-        return HTTPBasicAuthCredentialService(
-            username=username,
-            password=password,
-            realm=realm
-        )
+    # (removed) _parse_basic_auth_uri
 
     # Build methods
     def build_fastapi_app(self) -> FastAPI:
@@ -918,20 +664,7 @@ class AdkBuilder:
         memory_service = self._create_memory_service()
         credential_service = self._create_credential_service()
         
-        # Initialize credential service if it's one of ours
-        if isinstance(credential_service, BaseCustomCredentialService):
-            import asyncio
-            try:
-                # Try to initialize in current event loop
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # Create a task for initialization
-                    asyncio.create_task(credential_service.initialize())
-                else:
-                    loop.run_until_complete(credential_service.initialize())
-            except RuntimeError:
-                # No event loop, create one
-                asyncio.run(credential_service.initialize())
+        # No custom credential initialization; ADK services are passed through
         
         # Use our enhanced FastAPI function that properly supports credential services
         logger.info("Building FastAPI app with enhanced credential service support")
@@ -1005,17 +738,7 @@ class AdkBuilder:
         memory_service = self._create_memory_service()
         credential_service = self._create_credential_service()
         
-        # Initialize credential service if it's one of ours
-        if isinstance(credential_service, BaseCustomCredentialService):
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(credential_service.initialize())
-                else:
-                    loop.run_until_complete(credential_service.initialize())
-            except RuntimeError:
-                asyncio.run(credential_service.initialize())
+        # No custom credential initialization; ADK services are passed through
         
         # Create Runner with all services
         app_name = self._app_name or (agent_or_agent_name if isinstance(agent_or_agent_name, str) else "default_app")

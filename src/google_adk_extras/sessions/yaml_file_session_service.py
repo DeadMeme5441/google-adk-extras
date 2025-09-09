@@ -1,9 +1,7 @@
 """YAML file-based session service implementation."""
 
-import json
 import time
 import uuid
-import os
 from typing import Any, Optional
 from pathlib import Path
 

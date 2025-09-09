@@ -1,6 +1,5 @@
 """MongoDB-based session service implementation."""
 
-import json
 import time
 import uuid
 from typing import Any, Optional, Dict

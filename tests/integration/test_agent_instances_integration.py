@@ -8,14 +8,11 @@ import pytest
 import tempfile
 import os
 import shutil
-import asyncio
 from unittest.mock import Mock, patch, MagicMock
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from google.adk.agents.base_agent import BaseAgent
-from google.adk.agents import Agent
 from google.adk.cli.utils.agent_loader import AgentLoader
 
 from google_adk_extras.adk_builder import AdkBuilder

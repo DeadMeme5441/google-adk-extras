@@ -1,11 +1,6 @@
 """Unit tests for artifact services using pytest."""
 
 import pytest
-import asyncio
-import tempfile
-import shutil
-import os
-from unittest.mock import patch, MagicMock
 
 from google.genai.types import Blob, Part
 

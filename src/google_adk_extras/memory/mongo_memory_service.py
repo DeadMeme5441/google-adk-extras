@@ -1,6 +1,5 @@
 """MongoDB-based memory service implementation using PyMongo."""
 
-import json
 import logging
 from typing import Optional, List
 import re

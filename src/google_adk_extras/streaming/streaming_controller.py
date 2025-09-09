@@ -1,9 +1,9 @@
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Set, Callable, Awaitable
+from typing import Any, Dict, Optional, Callable, Awaitable
 
-from fastapi import WebSocket, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel
 
 from google.adk.events.event import Event

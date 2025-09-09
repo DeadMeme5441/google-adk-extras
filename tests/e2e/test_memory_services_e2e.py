@@ -3,7 +3,7 @@
 import pytest
 import tempfile
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from google.genai import types
 try:

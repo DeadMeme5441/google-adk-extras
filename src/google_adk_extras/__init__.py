@@ -1,4 +1,4 @@
-"""Production-ready services, credentials, and FastAPI wiring for Google ADK.
+"""Production-ready services and FastAPI wiring for Google ADK.
 
 Public API surface:
 - AdkBuilder
@@ -11,7 +11,7 @@ Service groups are exposed via subpackages:
 - google_adk_extras.sessions
 - google_adk_extras.artifacts
 - google_adk_extras.memory
-- google_adk_extras.credentials
+  (credential services are provided by ADK; no custom extras here)
 """
 
 from .adk_builder import AdkBuilder
@@ -28,4 +28,4 @@ __all__ = [
     "CustomAgentLoader",
 ]
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"

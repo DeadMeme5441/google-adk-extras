@@ -1,6 +1,5 @@
 """MongoDB-based artifact service implementation."""
 
-import json
 from typing import Optional, List
 from datetime import datetime
 

@@ -1,8 +1,6 @@
 """Local folder-based artifact service implementation."""
 
-import os
 import json
-import base64
 from typing import Optional, List
 from pathlib import Path
 from datetime import datetime, timezone

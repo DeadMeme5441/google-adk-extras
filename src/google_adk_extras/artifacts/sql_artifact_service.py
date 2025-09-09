@@ -1,6 +1,5 @@
 """SQL-based artifact service implementation using SQLAlchemy."""
 
-import json
 from typing import Optional, List
 from datetime import datetime, timezone
 

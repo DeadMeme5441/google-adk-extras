@@ -7,7 +7,7 @@ thread-safe registry management.
 
 import logging
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from google.adk.agents.base_agent import BaseAgent
 from google.adk.cli.utils.base_agent_loader import BaseAgentLoader

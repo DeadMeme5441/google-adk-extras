@@ -5,13 +5,11 @@ AdkWebServer to use our EnhancedRunner with advanced features.
 """
 
 import os
-from typing import Optional
 
 from google.adk.cli.adk_web_server import AdkWebServer
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.adk.cli.utils import cleanup
 from google.adk.cli.utils import envs
-from google.adk.runners import Runner
 
 from .enhanced_runner import EnhancedRunner
 

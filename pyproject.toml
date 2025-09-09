@@ -1,7 +1,7 @@
 [project]
 name = "google-adk-extras"
-version = "0.2.6"
-description = "Production-ready services, credentials, and FastAPI wiring for Google ADK"
+version = "0.2.7"
+description = "Production-ready services and FastAPI wiring for Google ADK"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 authors = [
@@ -36,6 +36,20 @@ docs = ["mkdocs", "mkdocs-material", "mkdocs-llmstxt"]
 # Everything
 all = [
     "google-adk-extras[sql,mongodb,redis,yaml,s3,jwt,web,docs]",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+  "F401",  # unused-import (common in optional backends)
+  "F841",  # unused-variable (tests and examples)
+  "F821",  # undefined-name (forward-ref type strings in optional extras)
+  "E402",  # module-import-not-at-top-of-file (test-only patterns)
+  "E501",  # line-too-long (permissive until we tighten rules)
 ]
 
 [build-system]

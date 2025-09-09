@@ -1,13 +1,7 @@
 """Unit tests for session services using pytest."""
 
 import pytest
-import asyncio
-import tempfile
-import shutil
-import os
-from unittest.mock import patch, MagicMock
 
-from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
 from google_adk_extras.sessions.base_custom_session_service import BaseCustomSessionService

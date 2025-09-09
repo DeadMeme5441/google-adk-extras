@@ -6,7 +6,7 @@
 [![Docs](https://img.shields.io/badge/docs-site-brightgreen)](https://deadmeme5441.github.io/google-adk-extras/)
 [![Docs Build](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/docs.yml/badge.svg)](https://github.com/DeadMeme5441/google-adk-extras/actions/workflows/docs.yml)
 
-Production-ready extensions for Google ADK (Agent Development Kit). This library adds durable service backends (sessions, artifacts, memory), practical credential services (OAuth2/JWT/Basic), and clean FastAPI wiring so you can run ADK agents with real storage and auth.
+Production-ready extensions for Google ADK (Agent Development Kit). This library adds durable service backends (sessions, artifacts, memory) and clean FastAPI wiring (with optional streaming) so you can run ADK agents with real storage.
 
 What this is not: a fork of ADK. It builds on ADK’s core runtime, agents, tools and callbacks, and drops in where ADK expects services and a web server.
 
@@ -15,10 +15,9 @@ What this is not: a fork of ADK. It builds on ADK’s core runtime, agents, tool
 
 ADK provides the core primitives (Runner, Session/State, MemoryService, ArtifactService, CredentialService, Agents/Tools, callbacks, Dev UI, and deployment paths). See the official ADK docs for concepts and APIs.
 
-This package focuses on three gaps common in real apps:
+This package focuses on a few gaps common in real apps:
 - Durable storage backends beyond in‑memory defaults
-- Usable credential flows (Google/GitHub/Microsoft/X OAuth2, JWT, Basic)
-- FastAPI integration that accepts your credential service without hacks
+- FastAPI integration with optional streaming (SSE/WS)
 
 
 ## Features
@@ -26,8 +25,7 @@ This package focuses on three gaps common in real apps:
 - Session services: SQL (SQLite/Postgres/MySQL), MongoDB, Redis, YAML files
 - Artifact services: Local folder (versioned), S3‑compatible, SQL, MongoDB
 - Memory services: SQL, MongoDB, Redis, YAML files (term search over text parts)
-- Credential services: Google/GitHub/Microsoft/X (OAuth2), JWT, HTTP Basic
-- Enhanced FastAPI wiring that respects a provided credential service
+- Enhanced FastAPI wiring for ADK apps (with optional streaming)
 - Fluent builder (`AdkBuilder`) to assemble a FastAPI app or a Runner
  - A2A helpers for exposing/consuming agents (see below)
 
@@ -52,17 +50,17 @@ If you plan to use specific backends, also install their clients (examples):
 - MongoDB: `uv pip install pymongo`
 - Redis: `uv pip install redis`
 - S3: `uv pip install boto3`
-- JWT: `uv pip install PyJWT`
+  
+Note on credentials (0.2.7): This release removes custom credential services and URI helpers from this package. For outbound credentials used by tools, rely on ADK’s experimental BaseCredentialService (e.g., InMemory/SessionState) or your own ADK-compatible implementation. Inbound API authentication (protecting /run and streaming routes) will be provided as an optional FastAPI layer separately.
 
 
 ## Quickstart (FastAPI)
 
-Use the fluent builder to wire services and credentials. Then run with uvicorn.
+Use the fluent builder to wire services. Then run with uvicorn.
 
 ```python
 # app.py
 from google_adk_extras import AdkBuilder
-from google_adk_extras.credentials import GoogleOAuth2CredentialService
 
 app = (
     AdkBuilder()
@@ -70,11 +68,7 @@ app = (
     .with_session_service("sqlite:///./sessions.db")      # or: mongodb://, redis://, yaml://
     .with_artifact_service("local://./artifacts")         # or: s3://bucket, mongodb://, sql://
     .with_memory_service("yaml://./memory")               # or: redis://, mongodb://, sql://
-    .with_credential_service(GoogleOAuth2CredentialService(
-        client_id="…apps.googleusercontent.com",
-        client_secret="…",
-        scopes=["openid", "email", "profile"],
-    ))
+    # credentials: rely on ADK defaults or pass an ADK BaseCredentialService if needed
     .with_web_ui(True)     # serve ADK’s dev UI if assets available
     .with_agent_reload(True)
     .build_fastapi_app()
@@ -208,24 +202,8 @@ app = (
 ```
 
 
-## Credential URI cheatsheet (optional)
-
-If you prefer URIs instead of constructing services:
-
-- Google OAuth2: `oauth2-google://client_id:secret@scopes=openid,email,profile`
-- GitHub OAuth2: `oauth2-github://client_id:secret@scopes=user,repo`
-- Microsoft OAuth2: `oauth2-microsoft://<tenant>/<client_id>:<secret>@scopes=User.Read`
-- X OAuth2: `oauth2-x://client_id:secret@scopes=tweet.read,users.read`
-- JWT: `jwt://<secret>@algorithm=HS256&issuer=my-app&audience=api.example.com&expiration_minutes=60`
-- Basic: `basic-auth://username:password@realm=My%20API`
-
-```python
-cred = (
-    AdkBuilder()
-    .with_credential_service_uri("jwt://secret@issuer=my-app")
-    ._create_credential_service()
-)
-```
+<!-- Credential URI helpers removed. Use ADK’s BaseCredentialService directly if needed,
+     and handle inbound API authentication at FastAPI level. -->
 
 
 ## Notes & limitations

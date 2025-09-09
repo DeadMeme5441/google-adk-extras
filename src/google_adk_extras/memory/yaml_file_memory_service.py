@@ -1,9 +1,7 @@
 """YAML file-based memory service implementation."""
 
-import os
-import json
 import logging
-from typing import Optional, List
+from typing import List
 from pathlib import Path
 import re
 from datetime import datetime

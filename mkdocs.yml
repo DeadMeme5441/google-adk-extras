@@ -17,7 +17,6 @@ nav:
   - Streaming: streaming.md
   - Services:
       - Durable Services: services.md
-      - Credentials: credentials.md
   - Programmatic Agents: agent-loading.md
   - URIs & Configuration: uris.md
   - Examples: examples.md
@@ -50,7 +49,7 @@ plugins:
         Durable Services:
         - services.md: Sessions, artifacts, memory backends and trade-offs
         Credentials:
-        - credentials.md: OAuth2 (Google/GitHub/Microsoft/X), JWT, Basic Auth
+        # credentials docs removed; use ADK documentation for outbound creds
         Programmatic Agents:
         - agent-loading.md: Custom loaders and in-memory registrations
         Configuration:

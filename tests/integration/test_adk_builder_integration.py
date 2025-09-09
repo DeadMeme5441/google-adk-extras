@@ -4,7 +4,6 @@ import pytest
 import tempfile
 import os
 import shutil
-from pathlib import Path
 
 try:
     from fastapi import FastAPI
@@ -14,9 +13,7 @@ except Exception:
     _FASTAPI = False
 
 from google_adk_extras.adk_builder import AdkBuilder
-from google_adk_extras.credentials.http_basic_auth_credential_service import HTTPBasicAuthCredentialService
 try:
-    import jwt as _jwt
     _HAVE_JWT = True
 except Exception:
     _HAVE_JWT = False
@@ -72,35 +69,9 @@ tools: []
             # Basic health check - the app should start without errors
             pass
     
-    def test_build_app_with_jwt_credential_service(self):
-        """Test building FastAPI app with JWT credential service."""
-        if not _HAVE_JWT:
-            pytest.skip("PyJWT not installed")
-        builder = AdkBuilder()
-        app = (builder
-               .with_agents_dir(self.agents_dir)
-               .with_credential_service_uri("jwt://test-secret@algorithm=HS256&issuer=test-app")
-               .build_fastapi_app())
-        
-        assert isinstance(app, FastAPI)
-        
-        with TestClient(app) as client:
-            # App should start successfully with JWT credentials
-            pass
+    # credential-service URI integration tests removed
     
-    def test_build_app_with_basic_auth_credential_service(self):
-        """Test building FastAPI app with HTTP Basic Auth credential service."""
-        builder = AdkBuilder()
-        app = (builder
-               .with_agents_dir(self.agents_dir)
-               .with_credential_service_uri("basic-auth://testuser:testpass")
-               .build_fastapi_app())
-        
-        assert isinstance(app, FastAPI)
-        
-        with TestClient(app) as client:
-            # App should start successfully with Basic Auth credentials
-            pass
+    # basic-auth integration test removed
     
     def test_build_app_with_session_db_kwargs(self):
         """Test building FastAPI app with session database configuration."""
@@ -180,11 +151,7 @@ tools: []
                    .with_a2a_protocol(False)
                    .with_host_port("127.0.0.1", 8001))
 
-        # Use JWT if available, otherwise fall back to Basic Auth to avoid requiring extras
-        if _HAVE_JWT:
-            builder = builder.with_credential_service_uri("jwt://multi-secret@algorithm=HS256&issuer=multi-app")
-        else:
-            builder = builder.with_credential_service_uri("basic-auth://user:pass")
+        # credential URI helpers removed
 
         app = builder.build_fastapi_app()
         
@@ -194,18 +161,7 @@ tools: []
             # App should start successfully with all configurations
             pass
     
-    def test_credential_service_integration_with_app(self):
-        """Test that credential service is properly integrated into the app."""
-        if not _HAVE_JWT:
-            pytest.skip("PyJWT not installed")
-        builder = AdkBuilder()
-        app = (builder
-               .with_agents_dir(self.agents_dir)
-               .with_credential_service_uri("jwt://test-secret@algorithm=HS256&issuer=test-integration")
-               .build_fastapi_app())
-        assert isinstance(app, FastAPI)
-        with TestClient(app) as client:
-            pass
+    # credential integration test removed
     
     def test_error_handling_invalid_agents_dir(self):
         """Test error handling for invalid agents directory."""
@@ -224,26 +180,7 @@ tools: []
         
         assert isinstance(app, FastAPI)
     
-    def test_uri_based_credential_configuration_integration(self):
-        """Test end-to-end URI-based credential service configuration."""
-        test_cases = [
-            "basic-auth://integrationuser:integrationpass",
-        ]
-        if _HAVE_JWT:
-            test_cases.insert(0, "jwt://integration-secret@algorithm=HS256&issuer=integration-test")
-        
-        for uri in test_cases:
-            builder = AdkBuilder()
-            app = (builder
-                   .with_agents_dir(self.agents_dir)
-                   .with_credential_service_uri(uri)
-                   .build_fastapi_app())
-            
-            assert isinstance(app, FastAPI)
-            
-            with TestClient(app) as client:
-                # Each credential service should allow the app to start
-                pass
+    # URI-based credential configuration tests removed
     
     def test_lifespan_integration(self):
         """Test FastAPI lifespan integration."""

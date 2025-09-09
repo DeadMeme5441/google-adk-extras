@@ -1,11 +1,9 @@
-import json
 import asyncio
 import pytest
 
 from fastapi.testclient import TestClient
 from google.genai import types
 from google.adk.events.event import Event
-from google.adk.cli.adk_web_server import RunAgentRequest
 
 from google_adk_extras.enhanced_fastapi import get_enhanced_fast_api_app
 from google_adk_extras.custom_agent_loader import CustomAgentLoader

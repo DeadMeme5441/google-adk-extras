@@ -2,16 +2,11 @@
 
 import pytest
 import tempfile
-import os
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
-from starlette.types import Lifespan
+from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI
 
 from google_adk_extras.adk_builder import AdkBuilder
-from google_adk_extras.credentials.google_oauth2_credential_service import GoogleOAuth2CredentialService
-from google_adk_extras.credentials.http_basic_auth_credential_service import HTTPBasicAuthCredentialService
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
@@ -82,59 +77,13 @@ class TestAdkBuilder:
         assert builder._memory_service is memory_service
         assert builder._memory_service_uri == "rag://test-corpus"
     
-    def test_credential_service_instance(self):
-        """Test credential service instance configuration."""
-        cred_service = GoogleOAuth2CredentialService("client-id", "client-secret")
-        builder = AdkBuilder()
-        builder.with_credential_service(cred_service)
-        
-        assert builder._credential_service is cred_service
+    # credential service instance tests removed
     
-    def test_credential_service_oauth2_google_uri_parsing(self):
-        """Test OAuth2 Google URI parsing."""
-        builder = AdkBuilder()
-        builder.with_credential_service_uri("oauth2-google://client-id:secret@scopes=calendar,gmail.readonly")
-        
-        credential_service = builder._create_credential_service()
-        assert isinstance(credential_service, GoogleOAuth2CredentialService)
-        assert credential_service.client_id == "client-id"
-        assert credential_service.client_secret == "secret"
-        assert "calendar" in credential_service.scopes
-        assert "gmail.readonly" in credential_service.scopes
+    # OAuth2 Google URI parsing test removed
     
-    def test_credential_service_jwt_uri_parsing(self):
-        """Test JWT URI parsing."""
-        try:
-            import jwt  # noqa: F401
-        except Exception:
-            pytest.skip("PyJWT not installed")
-        builder = AdkBuilder()
-        builder.with_credential_service_uri("jwt://my-secret@algorithm=HS256&issuer=test-app")
-        
-        credential_service = builder._create_credential_service()
-        # Avoid importing optional class; verify by name
-        assert credential_service.__class__.__name__ == "JWTCredentialService"
-        assert credential_service.secret == "my-secret"
-        assert credential_service.algorithm == "HS256"
-        assert credential_service.issuer == "test-app"
-    
-    def test_credential_service_basic_uri_parsing(self):
-        """Test HTTP Basic Auth URI parsing."""
-        builder = AdkBuilder()
-        builder.with_credential_service_uri("basic-auth://username:password")
-        
-        credential_service = builder._create_credential_service()
-        assert isinstance(credential_service, HTTPBasicAuthCredentialService)
-        assert credential_service.username == "username"
-        assert credential_service.password == "password"
-    
-    def test_credential_service_uri_parsing_invalid(self):
-        """Test invalid credential service URI handling."""
-        builder = AdkBuilder()
-        
-        builder.with_credential_service_uri("invalid://test")
-        with pytest.raises(ValueError, match="Failed to parse credential service URI"):
-            builder._create_credential_service()
+    # JWT credential URI tests removed
+    # Basic auth credential URI tests removed
+    # Invalid credential URI tests removed
     
     def test_cors_configuration(self):
         """Test CORS origins configuration."""
@@ -191,18 +140,19 @@ class TestAdkBuilder:
     
     @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
     def test_build_fastapi_app_with_custom_credential_service(self, mock_enhanced_app):
-        """Test building FastAPI app with custom credential service."""
+        """Test building FastAPI app with explicit ADK credential service."""
+        from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
         mock_app = MagicMock(spec=FastAPI)
         mock_enhanced_app.return_value = mock_app
         
-        cred_service = GoogleOAuth2CredentialService("test-id", "test-secret")
+        cred_service = InMemoryCredentialService()
         
         with tempfile.TemporaryDirectory() as temp_dir:
             builder = (AdkBuilder()
                       .with_agents_dir(temp_dir)
                       .with_credential_service(cred_service))
             
-            result = builder.build_fastapi_app()
+            _ = builder.build_fastapi_app()
             
             # Verify credential service was passed
             call_kwargs = mock_enhanced_app.call_args[1]
@@ -227,7 +177,6 @@ class TestAdkBuilder:
                       .with_session_service("sqlite:///test.db")
                       .with_artifact_service("local:///tmp/artifacts")
                       .with_memory_service("yaml:///tmp/memory.yaml")
-                      .with_credential_service_uri("jwt://secret@issuer=test")
                       .with_eval_storage("local:///tmp/eval")
                       .with_cors(["http://localhost:3000"])
                       .with_web_ui(True)
@@ -256,28 +205,7 @@ class TestAdkBuilder:
             assert call_kwargs['lifespan'] is test_lifespan
             assert 'credential_service' in call_kwargs
     
-    @patch('google_adk_extras.enhanced_fastapi.get_enhanced_fast_api_app')
-    def test_credential_service_initialization(self, mock_enhanced_app):
-        """Test that custom credential services are properly initialized."""
-        try:
-            import jwt  # noqa: F401
-        except Exception:
-            pytest.skip("PyJWT not installed")
-        mock_app = MagicMock(spec=FastAPI)
-        mock_enhanced_app.return_value = mock_app
-        
-        with tempfile.TemporaryDirectory() as temp_dir:
-            builder = (AdkBuilder()
-                      .with_agents_dir(temp_dir)
-                      .with_credential_service_uri("jwt://secret@issuer=test"))
-            
-            result = builder.build_fastapi_app()
-            
-            # Verify credential service was created and passed properly
-            call_kwargs = mock_enhanced_app.call_args[1]
-            assert 'credential_service' in call_kwargs
-            credential_service = call_kwargs['credential_service']
-            assert credential_service is not None
+    # credential-service initialization test removed
 
 
 class TestAdkBuilderServiceCreation:

@@ -1,7 +1,6 @@
 """S3-compatible artifact service implementation."""
 
 import json
-import base64
 from typing import Optional, List
 from datetime import datetime, timezone
 

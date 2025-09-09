@@ -1,18 +1,13 @@
 """End-to-end tests simulating real usage scenarios."""
 
 import pytest
-import asyncio
-import tempfile
 import os
 import sys
-from unittest.mock import patch, MagicMock
 
 # Add src to path so we can import our modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from google.adk.sessions.session import Session
 from google.adk.events.event import Event
-from google.adk.runners import InMemoryRunner
 from google.genai.types import Blob, Part, Content
 
 try:

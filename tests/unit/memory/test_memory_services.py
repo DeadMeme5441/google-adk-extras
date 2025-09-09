@@ -3,9 +3,7 @@
 import pytest
 import tempfile
 import os
-from unittest.mock import Mock, AsyncMock
-import json
-from datetime import datetime
+from unittest.mock import Mock
 
 from google.genai import types
 try:
@@ -24,7 +22,6 @@ try:
     from google_adk_extras.memory import YamlFileMemoryService
 except Exception:
     YamlFileMemoryService = None
-from google.adk.memory.memory_entry import MemoryEntry
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
 
