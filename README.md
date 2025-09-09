@@ -51,7 +51,7 @@ If you plan to use specific backends, also install their clients (examples):
 - Redis: `uv pip install redis`
 - S3: `uv pip install boto3`
   
-Note on credentials (0.2.7): This release removes custom credential services and URI helpers from this package. For outbound credentials used by tools, rely on ADK’s experimental BaseCredentialService (e.g., InMemory/SessionState) or your own ADK-compatible implementation. Inbound API authentication (protecting /run and streaming routes) will be provided as an optional FastAPI layer separately.
+Note on credentials (0.3.0): Outbound credentials for tools remain ADK’s concern (use ADK’s BaseCredentialService). Inbound API authentication is now available as an optional FastAPI layer in this package (see Auth below). You can run fully open (no auth) or enable API Key, Basic, or JWT (including first‑party issuance backed by SQL).
 
 
 ## Quickstart (FastAPI)
@@ -61,6 +61,7 @@ Use the fluent builder to wire services. Then run with uvicorn.
 ```python
 # app.py
 from google_adk_extras import AdkBuilder
+from google_adk_extras.auth import AuthConfig, JwtIssuerConfig, JwtValidatorConfig
 
 app = (
     AdkBuilder()
@@ -82,6 +83,77 @@ uvicorn app:app --reload
 ```
 
 If you don’t keep agents on disk, register them programmatically and use a custom loader (see below).
+
+
+## Auth (optional)
+
+Auth is entirely optional. By default, all endpoints are open (no auth). To enable protection, pass `auth_config` into `get_enhanced_fast_api_app` via the builder or directly.
+
+Supported inbound methods:
+- API Key: `X-API-Key: <key>` header (or `?api_key=` query). Keys can be static via config, or issued/rotated via SQL‑backed endpoints.
+- HTTP Basic: `Authorization: Basic base64(user:pass)` for quick human/internal testing. Can validate against in‑memory map or the SQL users table.
+- Bearer JWT (validate): Accept JWTs from Google/Auth0/Okta/etc. via JWKS, or HS256 secret in dev. Enforces iss/aud/exp/nbf.
+- Bearer JWT (issue): First‑party issuer with HS256, tokens minted from `/auth/token`, users stored in SQL (SQLite/Postgres/MySQL).
+
+Minimal enablement (JWT validate only):
+
+```python
+from google_adk_extras.auth import AuthConfig, JwtValidatorConfig
+
+auth = AuthConfig(
+    enabled=True,
+    jwt_validator=JwtValidatorConfig(
+        jwks_url="https://accounts.google.com/.well-known/openid-configuration",  # example
+        issuer="https://accounts.google.com",
+        audience="your-api-audience",
+    ),
+)
+
+app = (
+    AdkBuilder()
+      .with_agents_dir("./agents")
+      .build_fastapi_app()
+)
+```
+
+First‑party issuer + validate (single shared HS256 secret) with SQL connector:
+
+```python
+from google_adk_extras.auth import AuthConfig, JwtIssuerConfig, JwtValidatorConfig
+
+issuer = JwtIssuerConfig(
+    enabled=True,
+    issuer="https://local-issuer",
+    audience="adk-api",
+    algorithm="HS256",
+    hs256_secret="topsecret",
+    database_url="sqlite:///./auth.db",  # also supports Postgres/MySQL
+)
+validator = JwtValidatorConfig(
+    issuer=issuer.issuer,
+    audience=issuer.audience,
+    hs256_secret=issuer.hs256_secret,
+)
+
+auth = AuthConfig(enabled=True, jwt_issuer=issuer, jwt_validator=validator)
+
+app = (
+    AdkBuilder()
+      .with_agents_dir("./agents")
+      .build_fastapi_app()
+)
+```
+
+Issuing and using tokens/keys at runtime:
+- Register user: `POST /auth/register?username=alice&password=wonder`
+- Token (password): `POST /auth/token?grant_type=password&username=alice&password=wonder`
+- Refresh: `POST /auth/refresh?user_id=<uid>&refresh_token=<jti>`
+- Create API key: `POST /auth/api-keys` (auth required) → returns `{ id, api_key }` (plaintext shown once)
+- List keys: `GET /auth/api-keys` (auth required)
+- Revoke key: `DELETE /auth/api-keys/{id}` (auth required)
+- Use API key: add `X-API-Key: <api_key>` to any protected route (keys currently allow full access)
+
+Protected routes include `/run`, `/run_sse`, all `/apps/...` session/artifact/eval endpoints, `/debug/*`, `/builder/*`, and optionally `/list-apps` and `/apps/{app}/metrics-info`.
 
 
 ## Quickstart (Runner)

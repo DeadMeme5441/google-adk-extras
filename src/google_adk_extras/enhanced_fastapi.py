@@ -34,6 +34,7 @@ from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.utils.feature_decorator import working_in_progress
 from google.adk.cli.adk_web_server import AdkWebServer
 from .enhanced_adk_web_server import EnhancedAdkWebServer
+from .auth import attach_auth, AuthConfig, JwtIssuerConfig, JwtValidatorConfig
 from .streaming import StreamingController, StreamingConfig
 from google.adk.cli.utils import envs
 from google.adk.cli.utils import evals
@@ -68,6 +69,8 @@ def get_enhanced_fast_api_app(
     # Streaming layer (optional)
     enable_streaming: bool = False,
     streaming_config: Optional[StreamingConfig] = None,
+    # Auth layer (optional)
+    auth_config: Optional[AuthConfig] = None,
 ) -> FastAPI:
     """Enhanced version of Google ADK's get_fast_api_app with EnhancedRunner integration.
     
@@ -599,5 +602,8 @@ def get_enhanced_fast_api_app(
                     pass
 
         app.include_router(router)
+
+    # Attach optional auth layer last so all routes are covered
+    attach_auth(app, auth_config)
 
     return app

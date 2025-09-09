@@ -14,6 +14,11 @@ What this is not: a fork of ADK. It builds on top of google-adk.
 - `EnhancedAdkWebServer`
 - `EnhancedRunner` (thin wrapper)
 - `CustomAgentLoader` (programmatic agents)
-- Services via subpackages: `sessions`, `artifacts`, `memory`, `credentials`
+- Services via subpackages: `sessions`, `artifacts`, `memory` (optional inbound auth lives under `auth/`)
 
 See Quickstarts for copy‑paste examples.
+
+Additional guides:
+- [FastAPI Integration](fastapi.md)
+- [Streaming](streaming.md)
+- [Auth (Optional)](auth.md)
