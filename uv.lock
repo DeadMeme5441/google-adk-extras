@@ -473,7 +473,7 @@ wheels = [
 
 [[package]]
 name = "google-adk-extras"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "google-adk" },
