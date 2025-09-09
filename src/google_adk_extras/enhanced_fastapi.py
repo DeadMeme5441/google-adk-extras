@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
-from typing import Any, Mapping, Optional, List, Callable, Dict
+from typing import Any, Mapping, Optional, List, Callable, Dict, Union
 
 import click
 from fastapi import FastAPI
@@ -57,6 +57,7 @@ def get_enhanced_fast_api_app(
     eval_storage_uri: Optional[str] = None,
     allow_origins: Optional[List[str]] = None,
     web: bool = True,
+    web_assets_dir: Optional[Union[str, Path]] = None,
     a2a: bool = False,
     programmatic_a2a: bool = False,
     programmatic_a2a_mount_base: str = "/a2a",
@@ -305,20 +306,53 @@ def get_enhanced_fast_api_app(
             tear_down_observer=tear_down_observer,
         )
 
-    if web:
+    def _auto_find_web_assets() -> Optional[Path]:
         try:
-            # Try to find ADK's web assets
-            from google.adk.cli.fast_api import BASE_DIR
-            ANGULAR_DIST_PATH = BASE_DIR / "browser"
-        except (ImportError, AttributeError):
-            # Fallback if ADK structure changes
-            BASE_DIR = Path(__file__).parent.resolve()
-            ANGULAR_DIST_PATH = BASE_DIR / "browser"
-        
-        if ANGULAR_DIST_PATH.exists():
-            extra_fast_api_args.update(web_assets_dir=ANGULAR_DIST_PATH)
+            # Prefer importlib.resources so this works across ADK versions
+            import importlib.resources as r
+            try:
+                import google.adk.cli.fast_api as fast_api_pkg  # type: ignore
+                base = r.files(fast_api_pkg)
+                candidates = [
+                    base / "browser",
+                    base / "static" / "browser",
+                ]
+            except Exception:
+                import google.adk.cli as cli_pkg  # type: ignore
+                base = r.files(cli_pkg) / "fast_api"
+                candidates = [
+                    base / "browser",
+                    base / "static" / "browser",
+                ]
+            for p in candidates:
+                if p.exists() and (p / "index.html").exists():
+                    # Convert to real filesystem Path if possible
+                    try:
+                        return Path(str(p))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        # Fallback to local relative path (for dev builds of this package)
+        local = Path(__file__).parent / "browser"
+        if local.exists() and (local / "index.html").exists():
+            return local
+        return None
+
+    if web:
+        chosen: Optional[Path] = None
+        if web_assets_dir is not None:
+            p = Path(web_assets_dir)
+            if p.exists():
+                chosen = p
+        if chosen is None:
+            chosen = _auto_find_web_assets()
+        if chosen is not None:
+            extra_fast_api_args.update(web_assets_dir=chosen)
         else:
-            logger.warning("Web UI assets not found, web interface will not be available")
+            logger.warning(
+                "Web UI assets not found; set web_assets_dir or install an ADK build that ships fast_api/browser"
+            )
 
     # Create FastAPI app
     app = adk_web_server.get_fast_api_app(

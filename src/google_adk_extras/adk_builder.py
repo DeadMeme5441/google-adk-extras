@@ -683,6 +683,7 @@ class AdkBuilder:
             eval_storage_uri=self._eval_storage_uri,
             allow_origins=self._allow_origins,
             web=self._web_ui,
+            # Expose future override via builder when needed
             a2a=self._a2a,
             programmatic_a2a=self._a2a_expose_programmatic,
             programmatic_a2a_mount_base=self._a2a_programmatic_mount_base,
