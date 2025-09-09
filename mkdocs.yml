@@ -14,6 +14,7 @@ nav:
   - Getting Started: getting-started.md
   - Quickstarts: quickstarts.md
   - FastAPI Integration: fastapi.md
+  - Auth (Optional): auth.md
   - Streaming: streaming.md
   - Services:
       - Durable Services: services.md
@@ -46,10 +47,10 @@ plugins:
         - quickstarts.md: A few end-to-end snippets to copy/paste
         FastAPI & A2A:
         - fastapi.md: Build a FastAPI app with AdkBuilder and enable A2A
+        Auth:
+        - auth.md: Optional inbound API authentication
         Durable Services:
         - services.md: Sessions, artifacts, memory backends and trade-offs
-        Credentials:
-        # credentials docs removed; use ADK documentation for outbound creds
         Programmatic Agents:
         - agent-loading.md: Custom loaders and in-memory registrations
         Configuration:
