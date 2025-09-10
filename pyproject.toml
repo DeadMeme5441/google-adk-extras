@@ -1,6 +1,6 @@
 [project]
 name = "google-adk-extras"
-version = "0.3.2"
+version = "0.3.3"
 description = "Production-ready services and FastAPI wiring for Google ADK"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
