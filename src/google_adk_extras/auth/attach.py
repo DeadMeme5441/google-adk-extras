@@ -34,22 +34,41 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
             # SQL store not available; API key issuance and password grants will be unavailable.
             auth_store = None
 
+    # Decide gating for each method (None => auto)
+    allow_api_key = (
+        cfg.allow_api_key if cfg.allow_api_key is not None else (bool(api_keys) or bool(issuer_cfg and issuer_cfg.database_url))
+    )
+    allow_basic = (
+        cfg.allow_basic if cfg.allow_basic is not None else (bool(basic_users) or bool(issuer_cfg and issuer_cfg.database_url))
+    )
+    allow_bearer_jwt = (
+        cfg.allow_bearer_jwt if cfg.allow_bearer_jwt is not None else (validator is not None)
+    )
+    allow_issuer_endpoints = (
+        cfg.allow_issuer_endpoints if cfg.allow_issuer_endpoints is not None else bool(issuer_cfg and issuer_cfg.enabled)
+    )
+
     # Security helpers
     api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
     async def _authenticate(request: Request) -> dict:
         # API Key
-        api_key = request.query_params.get("api_key") or request.headers.get("x-api-key") or request.headers.get("X-API-Key")
-        if not api_key:
-            api_key = await api_key_header.__call__(request)
-        if api_key and api_key in api_keys:
-            return {"method": "api_key", "sub": "api_key_client"}
-        if api_key and auth_store and auth_store.verify_api_key(api_key):
-            return {"method": "api_key", "sub": "api_key_client"}
+        if allow_api_key:
+            api_key = None
+            if cfg.allow_query_api_key:
+                api_key = request.query_params.get("api_key")
+            if not api_key:
+                api_key = request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+            if not api_key:
+                api_key = await api_key_header.__call__(request)
+            if api_key and api_key in api_keys:
+                return {"method": "api_key", "sub": "api_key_client"}
+            if api_key and auth_store and auth_store.verify_api_key(api_key):
+                return {"method": "api_key", "sub": "api_key_client"}
 
         # Basic
         authz = request.headers.get("authorization") or request.headers.get("Authorization")
-        if authz and authz.lower().startswith("basic "):
+        if allow_basic and authz and authz.lower().startswith("basic "):
             try:
                 b64 = authz.split(" ", 1)[1]
                 raw = base64.b64decode(b64).decode("utf-8")
@@ -66,7 +85,7 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
                 return {"method": "basic", "sub": username, "username": username}
 
         # Bearer JWT
-        if authz and authz.lower().startswith("bearer "):
+        if allow_bearer_jwt and authz and authz.lower().startswith("bearer "):
             token = authz.split(" ", 1)[1]
             if validator and (validator.jwks_url or validator.hs256_secret):
                 try:
@@ -152,7 +171,7 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
     app.add_middleware(_AuthMiddleware)
 
     # Token issuance endpoints (optional)
-    if issuer_cfg and issuer_cfg.enabled:
+    if allow_issuer_endpoints and issuer_cfg and issuer_cfg.enabled:
         if issuer_cfg.algorithm == "HS256" and not issuer_cfg.hs256_secret:
             raise RuntimeError("HS256 issuer requires hs256_secret")
         router = APIRouter()
@@ -222,8 +241,8 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
 
         app.include_router(router)
 
-    # API key management endpoints (require SQL store)
-    if auth_store:
+    # API key management endpoints (require SQL store) — only if API keys are allowed
+    if auth_store and allow_api_key:
         api_router = APIRouter()
 
         @api_router.post("/auth/api-keys")
@@ -241,3 +260,27 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
             return {"ok": True}
 
         app.include_router(api_router)
+
+    # /auth/me — identity echo endpoint
+    who_router = APIRouter()
+
+    @who_router.get("/auth/me")
+    async def auth_me(request: Request):
+        try:
+            ident = await _authenticate(request)
+        except HTTPException as e:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": e.detail}, status_code=e.status_code)
+        out = {"method": ident.get("method"), "sub": ident.get("sub")}
+        if ident.get("username"):
+            out["username"] = ident["username"]
+        claims = ident.get("claims") or {}
+        if claims:
+            safe = {k: claims.get(k) for k in ("iss", "aud", "sub", "iat", "nbf", "exp") if k in claims}
+            for k in ("scope", "scopes", "roles"):
+                if k in claims:
+                    safe[k] = claims[k]
+            out["claims"] = safe
+        return out
+
+    app.include_router(who_router)

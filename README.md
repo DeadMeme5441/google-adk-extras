@@ -95,6 +95,11 @@ Supported inbound methods:
 - Bearer JWT (validate): Accept JWTs from Google/Auth0/Okta/etc. via JWKS, or HS256 secret in dev. Enforces iss/aud/exp/nbf.
 - Bearer JWT (issue): First‑party issuer with HS256, tokens minted from `/auth/token`, users stored in SQL (SQLite/Postgres/MySQL).
 
+Per‑method gating:
+- `allow_api_key`, `allow_basic`, `allow_bearer_jwt`, `allow_issuer_endpoints` (True/False to force, None=auto)
+- `allow_query_api_key` (default True) to disable `?api_key=` usage
+See docs/auth.md for examples and details. Also available: `GET /auth/me` to introspect the current identity.
+
 Minimal enablement (JWT validate only):
 
 ```python

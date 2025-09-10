@@ -15,6 +15,37 @@ Supported methods:
 - Bearer JWT (issue)
   - First‑party issuer backed by SQL; exposes `/auth/register`, `/auth/token`, `/auth/refresh`.
 
+### Per-method gating (fine control)
+Set these flags on `AuthConfig` to explicitly allow/deny methods:
+
+- `allow_api_key: Optional[bool]` — True/False to force enable/disable. None (default) auto-enables if static keys or SQL store exist.
+- `allow_basic: Optional[bool]` — True/False to force; None auto-enables if a basic user map or SQL store exists.
+- `allow_bearer_jwt: Optional[bool]` — True/False to force; None auto-enables if `jwt_validator` is provided.
+- `allow_issuer_endpoints: Optional[bool]` — True/False to force; None auto-enables if `jwt_issuer.enabled=True`.
+- `allow_query_api_key: bool` — If False, disables `?api_key=` query usage (header only).
+
+Example: Only JWT (OIDC), no API key or Basic
+```python
+auth = AuthConfig(
+    enabled=True,
+    jwt_validator=JwtValidatorConfig(jwks_url=..., issuer=..., audience=...),
+    allow_api_key=False,
+    allow_basic=False,
+    allow_bearer_jwt=True,
+)
+```
+
+### Who am I endpoint
+- `GET /auth/me` — returns the authenticated identity as seen by the server:
+  ```json
+  {
+    "method": "jwt|api_key|basic",
+    "sub": "user-id-or-subject",
+    "username": "optional",
+    "claims": { "iss": "...", "aud": "...", "sub": "...", "iat": 0, "nbf": 0, "exp": 0, "scope|scopes|roles": "..." }
+  }
+  ```
+
 ## Quick examples
 
 ### Enable JWT validate only
@@ -76,4 +107,3 @@ from google_adk_extras.enhanced_fastapi import get_enhanced_fast_api_app
 from google_adk_extras.auth import AuthConfig
 app = get_enhanced_fast_api_app(..., auth_config=AuthConfig(enabled=True, api_keys=["test"]))
 ```
-

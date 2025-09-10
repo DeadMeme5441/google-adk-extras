@@ -38,8 +38,14 @@ class AuthConfig:
     basic_users: dict[str, str] = field(default_factory=dict)  # username -> password (PBKDF2 hash or plaintext for tests)
     jwt_validator: Optional[JwtValidatorConfig] = None
     jwt_issuer: Optional[JwtIssuerConfig] = None
+    # Per-method gates (None = auto, True/False = force on/off)
+    allow_api_key: Optional[bool] = None
+    allow_basic: Optional[bool] = None
+    allow_bearer_jwt: Optional[bool] = None
+    allow_issuer_endpoints: Optional[bool] = None
+    # Header vs query controls for API key
+    allow_query_api_key: bool = True
     # Route policy toggles
     protect_list_apps: bool = True
     protect_metrics: bool = True
     # Scopes are advisory; we currently validate presence of a token and subject. Extend as needed.
-
