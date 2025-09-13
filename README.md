@@ -196,6 +196,15 @@ Auth (FastAPI attach)
 - Configure `AuthConfig(jwt_issuer=JwtIssuerConfig(database_url=...))` with
   `sqlite:///...`, `postgresql://...`, or `mongodb://host/db`.
 
+Session GET wrapper (filters & projections)
+- The standard ADK GET session endpoint is wrapped (same path) to support query filters without changing response shape.
+- Examples:
+  - `?fields=id,events,lastUpdateTime`
+  - `&events_limit=120&events_sort=asc&partial=false&drop_empty=true`
+  - `&include_event_fields=content,actions,id,timestamp,author,invocationId,branch`
+  - `&include_part_types=text,functionCall,functionResponse`
+  - `&include_action_fields=stateDelta,artifactDelta`
+
 ### A2A helpers (new)
 
 Two light-weight helpers wrap ADK’s A2A capabilities:

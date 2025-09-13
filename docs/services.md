@@ -41,3 +41,13 @@ Notes
 - Issuer endpoints and middleware can use an auth store for users/refresh tokens and API keys.
 - Backends: SQL (`sqlite:///`, `postgresql://`, `mysql://`) or MongoDB (`mongodb://host/db`).
 - Enable via `AuthConfig(jwt_issuer=JwtIssuerConfig(database_url=...))`.
+
+## Session GET filters (wrapper)
+- GET `/apps/{app}/users/{user}/sessions/{sessionId}` supports query parameters for:
+  - Top-level projection: `fields`
+  - Events windowing: `events_limit`, `events_after_id`, `events_before_id`, `events_since_ts`, `events_until_ts`, `events_sort`
+  - Event filters: `authors`, `branches`, `partial` (default false), `errors_only`, `with_state_changes`, `with_artifacts`, `drop_empty` (default true)
+  - Event projection: `include_event_fields`
+  - Parts filtering: `include_part_types`, `include_part_fields`
+  - Actions filtering: `include_action_fields`
+  - Optional subtrees: `include_usage`, `include_grounding`, `include_transcriptions`, `include_requested_auth`

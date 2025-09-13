@@ -546,6 +546,13 @@ def get_enhanced_fast_api_app(
 
     logger.info("Enhanced FastAPI app created with credential service support")
 
+    # Install response wrappers (do this before optional features to ensure coverage)
+    try:
+        from .wrappers.session_get_wrapper import SessionGetWrapperMiddleware
+        app.add_middleware(SessionGetWrapperMiddleware)
+    except Exception:
+        pass
+
     # Optional streaming mounts (SSE + WebSocket)
     if enable_streaming:
         cfg = streaming_config or StreamingConfig(enable_streaming=True)
