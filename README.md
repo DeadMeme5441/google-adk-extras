@@ -187,9 +187,14 @@ ADK defines abstract service interfaces and a runner/web stack. This package pro
 
 - Sessions
   - `SQLSessionService` — SQLAlchemy; JSON‑serialized state/events
-  - `MongoSessionService` — PyMongo; per‑session doc, indexed by app/user/id
+  - `MongoSessionService` — Async PyMongo (no Motor); per‑session doc + separate `events`/`app_states`/`user_states`, indexed by app/user/id
   - `RedisSessionService` — hashes per session + user set; JSON state/events
 - `YamlFileSessionService` — `base/app/user/{session_id}.yaml`
+
+Auth (FastAPI attach)
+- Password/API‑key flows backed by SQL or Mongo.
+- Configure `AuthConfig(jwt_issuer=JwtIssuerConfig(database_url=...))` with
+  `sqlite:///...`, `postgresql://...`, or `mongodb://host/db`.
 
 ### A2A helpers (new)
 

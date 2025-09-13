@@ -107,15 +107,23 @@ class AuthStore:
         return jti
 
     def verify_refresh(self, jti: str, user_id: str, fingerprint: Optional[str] = None) -> bool:
-        with self.Session() as s:
-            rt: Optional[RefreshToken] = s.query(RefreshToken).filter_by(jti=jti, user_id=user_id).first()
-            if not rt or rt.revoked_at is not None:
-                return False
-            if rt.expires_at <= datetime.now(timezone.utc):
-                return False
-            if fingerprint and rt.fingerprint and rt.fingerprint != fingerprint:
-                return False
-            return True
+        try:
+            with self.Session() as s:
+                rt: Optional[RefreshToken] = s.query(RefreshToken).filter_by(jti=jti, user_id=user_id).first()
+                if not rt or rt.revoked_at is not None:
+                    return False
+                exp = rt.expires_at
+                # Coerce offset-naive -> UTC for SQLite and ensure comparable types
+                if getattr(exp, "tzinfo", None) is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                if exp <= now:
+                    return False
+                if fingerprint and rt.fingerprint and rt.fingerprint != fingerprint:
+                    return False
+                return True
+        except Exception:
+            return False
 
     def revoke_refresh(self, jti: str) -> None:
         with self.Session() as s:

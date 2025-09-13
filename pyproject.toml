@@ -1,6 +1,6 @@
 [project]
 name = "google-adk-extras"
-version = "0.3.3"
+version = "0.3.4"
 description = "Production-ready services and FastAPI wiring for Google ADK"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
@@ -15,7 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 # Storage backends
 sql = ["sqlalchemy"]
-mongodb = ["pymongo"]
+mongodb = ["pymongo>=4.14"]
 redis = ["redis"]
 yaml = ["pyyaml"]
 s3 = ["boto3"]

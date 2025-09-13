@@ -8,7 +8,7 @@ If `import jwt` or database clients fail, install the matching extras:
 ```bash
 uv pip install google-adk-extras[jwt]      # PyJWT
 uv pip install google-adk-extras[sql]      # SQLAlchemy
-uv pip install google-adk-extras[mongodb]  # PyMongo
+uv pip install google-adk-extras[mongodb]  # PyMongo (async, >=4.14)
 uv pip install google-adk-extras[redis]    # redis
 uv pip install google-adk-extras[s3]       # boto3
 ```

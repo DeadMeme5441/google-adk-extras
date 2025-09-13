@@ -473,7 +473,7 @@ wheels = [
 
 [[package]]
 name = "google-adk-extras"
-version = "0.3.3"
+version = "0.3.4"
 source = { editable = "." }
 dependencies = [
     { name = "google-adk" },
@@ -540,7 +540,7 @@ requires-dist = [
     { name = "mkdocs-llmstxt", marker = "extra == 'docs'" },
     { name = "mkdocs-material", marker = "extra == 'docs'" },
     { name = "pyjwt", marker = "extra == 'jwt'" },
-    { name = "pymongo", marker = "extra == 'mongodb'" },
+    { name = "pymongo", marker = "extra == 'mongodb'", specifier = ">=4.14" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pyyaml", marker = "extra == 'yaml'" },

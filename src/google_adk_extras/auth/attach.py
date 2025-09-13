@@ -27,11 +27,16 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
     basic_users = cfg.basic_users or {}
     auth_store: Optional[Any] = None
     if issuer_cfg and issuer_cfg.database_url:
+        url = issuer_cfg.database_url
         try:
-            from .sql_store import AuthStore  # type: ignore
-            auth_store = AuthStore(issuer_cfg.database_url)
+            if url.startswith("mongodb://"):
+                from .mongo_store import AuthStore  # type: ignore
+                auth_store = AuthStore(url)
+            else:
+                from .sql_store import AuthStore  # type: ignore
+                auth_store = AuthStore(url)
         except Exception:
-            # SQL store not available; API key issuance and password grants will be unavailable.
+            # Store not available; API key issuance and password grants will be unavailable.
             auth_store = None
 
     # Decide gating for each method (None => auto)
@@ -179,7 +184,7 @@ def attach_auth(app: FastAPI, cfg: Optional[AuthConfig]) -> None:
         @router.post("/auth/register")
         async def register(username: str, password: str):
             if not auth_store:
-                raise HTTPException(status_code=400, detail="SQL store not configured")
+                raise HTTPException(status_code=400, detail="auth store not configured")
             uid = auth_store.create_user(username, password)
             return {"user_id": uid}
 
