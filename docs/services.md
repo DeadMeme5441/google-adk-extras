@@ -51,3 +51,16 @@ Notes
   - Parts filtering: `include_part_types`, `include_part_fields`
   - Actions filtering: `include_action_fields`
   - Optional subtrees: `include_usage`, `include_grounding`, `include_transcriptions`, `include_requested_auth`
+## Sessions list filters (wrapper)
+- GET `/apps/{app}/users/{user}/sessions` supports:
+  - Filters: `updated_after_ts`, `updated_before_ts`, `id_prefix`, `ids`
+  - Sort: `sort=last_update_time_desc|last_update_time_asc` (default: desc)
+  - Limit: `limit` (default 50, max 1000)
+  - Projection: `fields=id,appName,userId,state,events,lastUpdateTime`
+
+## Artifacts list filters (wrapper)
+- GET `/apps/{app}/users/{user}/sessions/{sessionId}/artifacts` supports:
+  - Filters: `prefix`, `contains`, `regex`, `names`
+  - Name paging: `after_name`, `before_name`
+  - Sort: `name_asc|name_desc` (default: asc)
+  - Limit: `limit` (default 100, max 1000)

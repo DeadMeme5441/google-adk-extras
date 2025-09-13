@@ -549,7 +549,11 @@ def get_enhanced_fast_api_app(
     # Install response wrappers (do this before optional features to ensure coverage)
     try:
         from .wrappers.session_get_wrapper import SessionGetWrapperMiddleware
+        from .wrappers.session_list_wrapper import SessionListWrapperMiddleware
+        from .wrappers.artifact_list_wrapper import ArtifactListWrapperMiddleware
         app.add_middleware(SessionGetWrapperMiddleware)
+        app.add_middleware(SessionListWrapperMiddleware)
+        app.add_middleware(ArtifactListWrapperMiddleware)
     except Exception:
         pass
 
