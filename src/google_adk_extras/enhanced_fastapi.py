@@ -557,6 +557,143 @@ def get_enhanced_fast_api_app(
     except Exception:
         pass
 
+    # Augment OpenAPI to advertise wrapper query parameters without changing routes
+    try:
+        original_openapi = app.openapi  # type: ignore[attr-defined]
+
+        def _ensure_params(op: dict) -> list:
+            params = op.get("parameters")
+            if not isinstance(params, list):
+                params = []
+                op["parameters"] = params
+            return params
+
+        def _add_params(op: dict, defs: list[dict]) -> None:
+            params = _ensure_params(op)
+            # avoid duplicates by name+in
+            existing = {(p.get("name"), p.get("in")) for p in params if isinstance(p, dict)}
+            for d in defs:
+                key = (d.get("name"), d.get("in"))
+                if key not in existing:
+                    params.append(d)
+
+        def _param(name: str, typ: str, description: str = "", default: object = None, enum: list | None = None) -> dict:
+            sch: dict = {"type": typ}
+            if enum:
+                sch["enum"] = enum
+            if default is not None:
+                sch["default"] = default
+            return {"name": name, "in": "query", "required": False, "schema": sch, "description": description}
+
+        def _array_param(name: str, description: str = "", enum: list | None = None) -> dict:
+            items = {"type": "string"}
+            if enum:
+                items["enum"] = enum
+            return {
+                "name": name,
+                "in": "query",
+                "required": False,
+                "style": "form",
+                "explode": False,  # CSV
+                "schema": {"type": "array", "items": items},
+                "description": description,
+            }
+
+        SESSION_EVENT_FIELDS = [
+            "content","actions","groundingMetadata","usageMetadata","inputTranscription","outputTranscription",
+            "liveSessionResumptionUpdate","customMetadata","longRunningToolIds","finishReason","errorCode","errorMessage",
+            "interrupted","turnComplete","id","timestamp","author","invocationId","branch",
+        ]
+        PART_TYPES = [
+            "text","functionCall","functionResponse","inlineData","fileData","executableCode","codeExecutionResult","videoMetadata","thought","thoughtSignature",
+        ]
+        ACTION_FIELDS = [
+            "stateDelta","artifactDelta","requestedAuthConfigs","skipSummarization","transferToAgent","escalate",
+        ]
+
+        def custom_openapi():  # type: ignore[override]
+            try:
+                if getattr(app, "_custom_openapi_schema", None):
+                    return app._custom_openapi_schema
+                schema = original_openapi()
+                paths = schema.get("paths", {})
+                # Session GET detail
+                p = "/apps/{app_name}/users/{user_id}/sessions/{session_id}"
+                if p in paths and "get" in paths[p]:
+                    op = paths[p]["get"]
+                    _add_params(
+                        op,
+                        [
+                            _array_param("fields", "Top-level fields to include"),
+                            _param("events_limit", "integer", "Max number of events", 100),
+                            _param("events_after_id", "string", "Return events strictly after this id"),
+                            _param("events_before_id", "string", "Return events strictly before this id"),
+                            _param("events_since_ts", "number", "Only events with timestamp >= since"),
+                            _param("events_until_ts", "number", "Only events with timestamp <= until"),
+                            _param("events_sort", "string", "Sort direction", "asc", ["asc","desc"]),
+                            _array_param("authors", "Only authors matching"),
+                            _array_param("branches", "Only branches matching"),
+                            _param("partial", "boolean", "Include partial frames", False),
+                            _param("errors_only", "boolean", "Only error events", False),
+                            _param("with_state_changes", "boolean", "Only events with stateDelta", False),
+                            _param("with_artifacts", "boolean", "Only events with artifacts", False),
+                            _param("drop_empty", "boolean", "Drop empty events after filtering", True),
+                            _array_param("include_event_fields", "Event fields to include", SESSION_EVENT_FIELDS),
+                            _array_param("include_part_types", "Content part types to include", PART_TYPES),
+                            _array_param("include_part_fields", "Fields inside each content part"),
+                            _array_param("include_action_fields", "Action fields to include", ACTION_FIELDS),
+                            _param("include_usage", "boolean", "Include usageMetadata", True),
+                            _param("include_grounding", "boolean", "Include groundingMetadata", True),
+                            _param("include_transcriptions", "boolean", "Include input/output transcriptions", True),
+                            _param("include_requested_auth", "boolean", "Include actions.requestedAuthConfigs", True),
+                        ],
+                    )
+
+                # Sessions list
+                p = "/apps/{app_name}/users/{user_id}/sessions"
+                if p in paths and "get" in paths[p]:
+                    op = paths[p]["get"]
+                    _add_params(
+                        op,
+                        [
+                            _param("updated_after_ts", "number", "Only sessions updated after this ts"),
+                            _param("updated_before_ts", "number", "Only sessions updated before this ts"),
+                            _param("id_prefix", "string", "Session id startswith"),
+                            _array_param("ids", "Only these session ids"),
+                            _param("sort", "string", "Sort by lastUpdateTime", "last_update_time_desc", ["last_update_time_desc","last_update_time_asc"]),
+                            _param("limit", "integer", "Max sessions (default 50, max 1000)", 50),
+                            _array_param("fields", "Top-level fields to include"),
+                        ],
+                    )
+
+                # Artifacts list (names)
+                p = "/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts"
+                if p in paths and "get" in paths[p]:
+                    op = paths[p]["get"]
+                    _add_params(
+                        op,
+                        [
+                            _param("prefix", "string", "Name startswith"),
+                            _param("contains", "string", "Name contains substring"),
+                            _param("regex", "string", "Name matches regex"),
+                            _array_param("names", "Whitelist names to include"),
+                            _param("after_name", "string", "Return names strictly after this name"),
+                            _param("before_name", "string", "Return names strictly before this name"),
+                            _param("sort", "string", "Sort by name", "name_asc", ["name_asc","name_desc"]),
+                            _param("limit", "integer", "Max names (default 100, max 1000)", 100),
+                        ],
+                    )
+
+                app._custom_openapi_schema = schema
+                return schema
+            except Exception:
+                # On any failure, fall back to the original openapi
+                return original_openapi()
+
+        app.openapi = custom_openapi  # type: ignore[assignment]
+    except Exception:
+        pass
+
     # Optional streaming mounts (SSE + WebSocket)
     if enable_streaming:
         cfg = streaming_config or StreamingConfig(enable_streaming=True)
